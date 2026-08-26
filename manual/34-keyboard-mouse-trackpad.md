@@ -37,6 +37,30 @@ o.window("(Alacritty|kitty|foot)", { scroll_touchpad = 1.5 })
 
 You can [see all the input options](https://wiki.hypr.land/Configuring/Basics/Variables/#input) on the Hyprland wiki for inputs.
 
+By default, Omarchy uses CapsLock as the compose key for [quick emojis](07-hotkeys.md#quick-emojis) and [other completions](07-hotkeys.md#quick-completions). If you'd rather use CapsLock as Caps Lock, move the compose key elsewhere by changing `compose:caps` in `kb_options`. For example, this moves the compose key to Right Alt:
+
+```lua
+hl.config({
+  input = {
+    kb_options = "compose:ralt",
+  },
+})
+```
+
+### Apple keyboard and trackpad defaults
+
+On an Apple keyboard, Command is the `Super` key used throughout this manual.
+The top row behaves as it does in macOS: press a key by itself for its media
+function, or hold `Fn` to send F1-F12. Omarchy binds its Mac-specific capture
+shortcuts to both forms, so `Fn` is optional for those combinations.
+
+The Mac-specific brightness and capture combinations are listed in
+[Hotkeys](07-hotkeys.md).
+
+Apple trackpads default to natural scrolling, physical clicks instead of
+tap-to-click, two-finger right-click, and a `0.4` scroll factor. Override any
+of these in `~/.config/hypr/input.lua` using the options shown above.
+
 ### Trackpad gestures
 
 You can also turn on [touchpad gestures](https://wiki.hypr.land/Configuring/Advanced-and-Cool/Gestures/), like swiping with three fingers to change workspaces:

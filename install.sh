@@ -10,6 +10,7 @@ set -euo pipefail
 
 readonly checkout="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 readonly package_output="$checkout/build-output"
+readonly asahi_alarm_key="12CE6799A94A3F1B5DDFFE88F576553597FB8FEB"
 
 # gum is how the rest of Omarchy talks to people, but it arrives with the
 # omarchy package well into this script, so every helper falls back to plain
@@ -37,6 +38,11 @@ fail() {
     printf '\033[31mError:\033[0m %s\n' "$*" >&2
   fi
   exit 1
+}
+
+# Asahi Alarm ships LANG=C, and nothing else in the install path replaces it.
+ensure_utf8_locale() {
+  source "$checkout/install/preflight/locale.sh"
 }
 
 ensure_gum() {
@@ -108,23 +114,44 @@ install_omarchy_packages() {
   source /usr/share/omarchy/default/bash/env-bootstrap
 }
 
+# The Asahi Alarm image normally ships this keyring already. A generic
+# aarch64 base does not, and pacman refuses to create the asahi-alarm database
+# until its master key is trusted. Install the keyring before the first refresh
+# so later AUR and ARM-repo package operations do not fail with a misleading
+# "database does not exist" error.
+ensure_asahi_alarm_keyring() {
+  grep -q '^\[asahi-alarm\]' /etc/pacman.conf || return 0
+  pacman -Q asahi-alarm-keyring >/dev/null 2>&1 && return 0
+
+  if ! sudo pacman-key --list-keys "$asahi_alarm_key" >/dev/null 2>&1; then
+    log "Importing the Asahi Alarm package signing key"
+    sudo pacman-key --recv-keys "$asahi_alarm_key" --keyserver hkps://keys.openpgp.org
+  fi
+  sudo pacman-key --lsign-key "$asahi_alarm_key" >/dev/null
+
+  log "Installing the Asahi Alarm package keyring"
+  sudo pacman -Sy --needed --noconfirm asahi-alarm-keyring
+}
+
 # Compared in bash rather than with grep against a process substitution, which
 # ugrep answers differently from GNU grep.
 # The shipped pacman.conf only lands during post-install, after the package set
 # is already installed, so the repo has to be added now: otherwise herdr builds
 # zig0.15 from source for two hours and aarch64 rejects it anyway.
 ensure_arm_package_repo() {
-  grep -q '^\[omarchy-aarch64\]' /etc/pacman.conf && return 0
+  if ! grep -q '^\[omarchy-aarch64\]' /etc/pacman.conf; then
+    local block
+    block=$(sed -n '/^\[omarchy-aarch64\]/,/^Server[[:space:]]*=/p' \
+      "$checkout/default/pacman/pacman-stable.conf")
+    [[ -n $block ]] || fail "default/pacman/pacman-stable.conf has no [omarchy-aarch64] section."
 
-  local block
-  block=$(sed -n '/^\[omarchy-aarch64\]/,/^Server[[:space:]]*=/p' \
-    "$checkout/default/pacman/pacman-stable.conf")
-  [[ -n $block ]] || fail "default/pacman/pacman-stable.conf has no [omarchy-aarch64] section."
+    log "Adding the Omarchy ARM package repo"
+    printf '\n%s\n' "$block" | sudo tee -a /etc/pacman.conf >/dev/null
+  fi
 
-  log "Adding the Omarchy ARM package repo"
-  printf '\n%s\n' "$block" | sudo tee -a /etc/pacman.conf >/dev/null
-  sudo pacman -Sy --noconfirm >/dev/null 2>&1 ||
-    warn "Could not refresh package databases after adding the ARM repo."
+  ensure_asahi_alarm_keyring
+  log "Refreshing package databases for ARM packages"
+  sudo pacman -Sy --noconfirm
 }
 
 load_unavailable_packages() {
@@ -249,6 +276,7 @@ snapshot_factory_baseline() {
 
 main() {
   check_preconditions
+  ensure_utf8_locale
   ensure_gum
   ensure_aur_helper
   ensure_package_sources

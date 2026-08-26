@@ -1044,7 +1044,9 @@ step_omarchy() {
   revoke_passwordless_sudo
   (( status == 0 )) || fail "install.sh exited $status -- fix it and run '$SELF --resume'"
 
-  configure_autologin "$username"
+  if root_is_encrypted; then
+    configure_autologin "$username"
+  fi
   verify_initramfs
   mkdir -p "$(dirname "$INSTALLED_MARKER")"
   date -u +%Y-%m-%dT%H:%M:%SZ >"$INSTALLED_MARKER"

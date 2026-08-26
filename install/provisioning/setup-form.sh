@@ -29,54 +29,56 @@ OMARCHY_FORM_SIGNAL=130
 # so an alphabetical English (US) landed deep enough to sit alone at the edge
 # of a page of layouts nobody scanning for it reads. Up here the default and
 # its variants are the first thing on screen no matter how the list grows.
-OMARCHY_KEYBOARD_LAYOUTS=$'English (US)|us
-English (UK)|uk
-English (US, Dvorak)|dvorak
-English (US, Colemak)|colemak
-Azerbaijani|azerty
-Belarusian|by
-Belgian|be-latin1
-Bulgarian|bg-cp1251
-Croatian|croat
-Czech|cz
-Danish|dk-latin1
-Dutch|nl
-Estonian|et
-Finnish|fi
-French|fr
-French (Canada)|cf
-French (Switzerland)|fr_CH
-Georgian|ge
-German|de
-German (Switzerland)|de_CH-latin1
-Greek|gr
-Hebrew|il
-Hungarian|hu
-Icelandic|is-latin1
-Irish|ie
-Italian|it
-Japanese|jp106
-Kazakh|kazakh
-Kyrgyz|kyrgyz
-Lao|la-latin1
-Latvian|lv
-Lithuanian|lt
-Macedonian|mk-utf
-Norwegian|no-latin1
-Polish|pl
-Portuguese|pt-latin1
-Portuguese (Brazil)|br-abnt2
-Romanian|ro
-Russian|ru
-Serbian|sr-latin
-Slovak|sk-qwertz
-Slovenian|slovene
-Spanish|es
-Spanish (Latin American)|la-latin1
-Swedish|sv-latin1
-Tajik|tj_alt-UTF8
-Turkish|trq
-Ukrainian|ua'
+#
+# Each row: label|console keymap|xkb layout|xkb variant.
+OMARCHY_KEYBOARD_LAYOUTS=$'English (US)|us|us|
+English (UK)|uk|gb|
+English (US, Dvorak)|dvorak|us|dvorak
+English (US, Colemak)|colemak|us|colemak
+Azerbaijani|azerty|az|
+Belarusian|by|by|
+Belgian|be-latin1|be|
+Bulgarian|bg-cp1251|bg|
+Croatian|croat|hr|
+Czech|cz|cz|
+Danish|dk-latin1|dk|
+Dutch|nl|nl|
+Estonian|et|ee|
+Finnish|fi|fi|
+French|fr|fr|
+French (Canada)|cf|ca|
+French (Switzerland)|fr_CH|ch|fr
+Georgian|ge|ge|
+German|de|de|
+German (Switzerland)|de_CH-latin1|ch|
+Greek|gr|gr|
+Hebrew|il|il|
+Hungarian|hu|hu|
+Icelandic|is-latin1|is|
+Irish|ie|ie|
+Italian|it|it|
+Japanese|jp106|jp|
+Kazakh|kazakh|kz|
+Kyrgyz|kyrgyz|kg|
+Lao|la-latin1|la|
+Latvian|lv|lv|
+Lithuanian|lt|lt|
+Macedonian|mk-utf|mk|
+Norwegian|no-latin1|no|
+Polish|pl|pl|
+Portuguese|pt-latin1|pt|
+Portuguese (Brazil)|br-abnt2|br|
+Romanian|ro|ro|
+Russian|ru|ru|
+Serbian|sr-latin|rs|latin
+Slovak|sk-qwertz|sk|
+Slovenian|slovene|si|
+Spanish|es|es|
+Spanish (Latin American)|la-latin1|latam|
+Swedish|sv-latin1|se|
+Tajik|tj_alt-UTF8|tj|
+Turkish|trq|tr|
+Ukrainian|ua|ua|'
 
 OMARCHY_USERNAME_PATTERN='^[a-z_][a-z0-9_-]*[$]?$'
 OMARCHY_RESERVED_USERNAMES='^(root|bin|daemon|mail|ftp|http|nobody|dbus|systemd-coredump|systemd-network|systemd-oom|systemd-journal-remote|systemd-resolve|systemd-timesync|tss|uuidd|alpm|git|avahi|cups|lp|_talkd|polkitd|rtkit|qemu|brltty|gluster|rpc|libvirt-qemu|pcscd|nvidia-persistenced|sddm)$'
@@ -97,8 +99,12 @@ omarchy_prompt_keyboard() {
     gum choose --height 10 --selected "English (US)" --header "Select keyboard layout") && status=0 || status=$?
   ((status == 0)) || return $status
 
+  local row
+  row=$(printf '%s\n' "$OMARCHY_KEYBOARD_LAYOUTS" | awk -F'|' -v c="$choice" '$1==c{print; exit}')
   keyboard_label="$choice"
-  keyboard=$(printf '%s\n' "$OMARCHY_KEYBOARD_LAYOUTS" | awk -F'|' -v c="$choice" '$1==c{print $2; exit}')
+  keyboard=$(cut -d'|' -f2 <<<"$row")
+  keyboard_xkb_layout=$(cut -d'|' -f3 <<<"$row")
+  keyboard_xkb_variant=$(cut -d'|' -f4 <<<"$row")
 }
 
 omarchy_prompt_username() {

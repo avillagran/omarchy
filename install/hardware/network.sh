@@ -52,7 +52,12 @@ if systemctl is-active --quiet NetworkManager.service 2>/dev/null; then
   systemctl stop systemd-networkd.service 2>/dev/null || true
 fi
 
-# enable-services.sh turns systemd-resolved on, but nothing points resolv.conf
-# at its stub, so a fresh install reboots with whatever the old resolver left
-# behind and cannot resolve a hostname. The Quattro upgrade already does this.
-ln -sfn ../run/systemd/resolve/stub-resolv.conf /etc/resolv.conf
+# Prefer systemd-resolved's stub when it is already available. During a live
+# install enable-services.sh only enables daemons; it deliberately does not
+# start them before reboot. Do not replace a working resolver with a dangling
+# stub link in that window, or later hardware setup loses network access.
+if [[ -e /run/systemd/resolve/stub-resolv.conf ]]; then
+  ln -sfn ../run/systemd/resolve/stub-resolv.conf /etc/resolv.conf
+elif [[ -e /run/NetworkManager/resolv.conf ]]; then
+  ln -sfn ../run/NetworkManager/resolv.conf /etc/resolv.conf
+fi

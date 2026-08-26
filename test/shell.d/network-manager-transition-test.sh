@@ -34,14 +34,19 @@ grep -F 'NetworkManager.service' "$migration" >/dev/null
 grep -F '20-wlan.network' "$migration" >/dev/null
 pass "migration repairs upgraded systems with networkd still active"
 
-# enable-services.sh switches DNS to systemd-resolved, but resolv.conf still
-# names whatever resolver the machine was installed with, so a fresh install
-# reboots unable to resolve a hostname. The Quattro upgrade already links it.
+# Prefer systemd-resolved after reboot, but keep a live install online while
+# the service is only enabled and not yet started.
+grep -F '[[ -e /run/systemd/resolve/stub-resolv.conf ]]' "$ROOT/install/hardware/network.sh" >/dev/null ||
+  fail "hardware setup checks whether the systemd-resolved stub exists"
 grep -F 'ln -sfn ../run/systemd/resolve/stub-resolv.conf /etc/resolv.conf' "$ROOT/install/hardware/network.sh" >/dev/null ||
   fail "hardware setup points resolv.conf at the systemd-resolved stub"
+grep -F '[[ -e /run/NetworkManager/resolv.conf ]]' "$ROOT/install/hardware/network.sh" >/dev/null ||
+  fail "hardware setup has a live NetworkManager resolver fallback"
+grep -F 'ln -sfn ../run/NetworkManager/resolv.conf /etc/resolv.conf' "$ROOT/install/hardware/network.sh" >/dev/null ||
+  fail "hardware setup links resolv.conf to the live NetworkManager resolver"
 grep -F 'systemctl enable systemd-resolved.service' "$ROOT/install/config/enable-services.sh" >/dev/null ||
   fail "system setup enables the resolver resolv.conf now points at"
-pass "fresh installs resolve hostnames after reboot"
+pass "fresh installs keep DNS working before and after resolver startup"
 
 # Asahi Alarm configures NetworkManager to drive Wi-Fi through iwd, so disabling
 # iwd without moving the backend leaves NetworkManager with no Wi-Fi devices at

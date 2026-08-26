@@ -24,15 +24,6 @@ obs-studio
 # emitting a misleading "skipped" warning for a package that cannot install here.
 dotnet-runtime
 
-# quickshell-git builds on aarch64 -- and then the build is thrown away. The
-# omarchy package depends on plain `quickshell`, which Arch Linux ARM now ships
-# in extra (0.3.0-2), so pacman satisfies the dependency from the repo and the
-# freshly compiled quickshell-git is never installed. Measured on a clean
-# install: the artifact sat unused in yay's cache while `pacman -Qi quickshell`
-# reported the repo package installed as a dependency of omarchy. Skipping it
-# changes nothing about what ends up on the machine, and drops a Qt/C++ compile
-# plus its cli11 and vulkan-headers makedepends from every install.
-quickshell-git
 
 # pinta is arch=('x86_64') in the AUR, so makepkg refuses it in seconds -- but
 # yay installs makedepends before makepkg gets that far, and pinta's are

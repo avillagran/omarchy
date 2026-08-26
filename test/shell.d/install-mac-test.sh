@@ -60,3 +60,21 @@ set_call=$(grep -n '^  install_default_package_set$' "$install_script" | cut -d:
 grep -qF 'gum style' "$install_script" ||
   fail "the installer speaks through gum once it is available"
 pass "the installer styles its output with gum from the start"
+
+# A generic aarch64 base has the Asahi repo stanza but not its signing keyring.
+# Bootstrap and locally sign the documented master key before pacman refreshes,
+# or optional ARM packages fail later with a misleading missing-database error.
+grep -qF 'asahi_alarm_key=' "$install_script" ||
+  fail "the installer pins the Asahi Alarm package signing key"
+grep -qF 'pacman-key --recv-keys "$asahi_alarm_key"' "$install_script" ||
+  fail "the installer bootstraps the Asahi Alarm package signing key"
+grep -qF 'pacman-key --lsign-key "$asahi_alarm_key"' "$install_script" ||
+  fail "the installer locally trusts the Asahi Alarm package signing key"
+grep -qF 'pacman -Sy --needed --noconfirm asahi-alarm-keyring' "$install_script" ||
+  fail "the installer installs the Asahi Alarm package keyring"
+keyring_call=$(grep -n '^  ensure_asahi_alarm_keyring$' "$install_script" | cut -d: -f1)
+refresh_call=$(grep -n '^  sudo pacman -Sy --noconfirm$' "$install_script" | cut -d: -f1)
+[[ -n $keyring_call && -n $refresh_call ]] || fail "the installer bootstraps the Asahi keyring before refresh"
+(( keyring_call < refresh_call )) ||
+  fail "the Asahi keyring is installed before the package database refresh"
+pass "the installer bootstraps Asahi signing keys before refreshing ARM packages"

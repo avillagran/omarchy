@@ -1,44 +1,47 @@
 #!/bin/bash
 
-# Set locale to en_US.UTF-8 for proper installation TUI support
+# Asahi Alarm ships LANG=C and Omarchy Mac has no ISO step to replace it, so a
+# by-hand install runs non-UTF-8: byte-wise sorting, ASCII-only \u escapes, and
+# any tool that reads the locale for its encoding.
+locale_conf="${OMARCHY_LOCALE_CONF:-/etc/locale.conf}"
+locale_gen="${OMARCHY_LOCALE_GEN:-/etc/locale.gen}"
+
+# Repair only the stock state -- an unset LANG, or the bare C/POSIX the image
+# ships. Any named locale is somebody's choice, C.UTF-8 included, so leave it.
+# A machine with no locale.conf at all reads as unset, not as a failure:
+# under pipefail the missing file would otherwise abort the installer.
+current=$(sed -n 's/^LANG=//p' "$locale_conf" 2>/dev/null | tail -1 | tr -d '"') || current=""
+
+case ${current:-C} in
+  C | POSIX) ;;
+  *)
+    echo "Leaving the locale as $current"
+    return 0 2>/dev/null || exit 0
+    ;;
+esac
+
+if (( ${EUID:-$(id -u)} == 0 )); then
+  as_root=()
+else
+  as_root=(sudo)
+fi
 
 echo "Setting up locale (en_US.UTF-8)..."
 
-# Check if en_US.UTF-8 is already the current locale
-if [[ "$(locale | grep LANG=en_US.UTF-8)" ]] && [[ "$(locale | grep LC_ALL=en_US.UTF-8 2>/dev/null || echo 'not_set')" != "not_set" ]]; then
-  echo "Locale already set to en_US.UTF-8"
-  return 0
-fi
-
-# Use sudo only when not running as root
-if [[ ${EUID:-$(id -u)} -eq 0 ]]; then
-  SUDO=""
-else
-  SUDO="sudo"
-fi
-
-# Ensure en_US.UTF-8 locale is generated
-if ! locale -a | grep -q "en_US.utf8\|en_US.UTF-8"; then
-  echo "Generating en_US.UTF-8 locale..."
-
-  # Uncomment en_US.UTF-8 in locale.gen if it's commented
-  if grep -q "^#en_US.UTF-8" /etc/locale.gen 2>/dev/null; then
-    ${SUDO:+$SUDO }sed -i 's/^#en_US.UTF-8/en_US.UTF-8/' /etc/locale.gen
-  elif ! grep -q "^en_US.UTF-8" /etc/locale.gen 2>/dev/null; then
-    # Add en_US.UTF-8 if it doesn't exist at all
-    echo "en_US.UTF-8 UTF-8" | ${SUDO:+$SUDO }tee -a /etc/locale.gen >/dev/null
+if ! locale -a 2>/dev/null | grep -qi "en_US.utf-\?8"; then
+  if grep -q '^#en_US.UTF-8' "$locale_gen" 2>/dev/null; then
+    "${as_root[@]}" sed -i 's/^#en_US.UTF-8/en_US.UTF-8/' "$locale_gen"
+  elif ! grep -q '^en_US.UTF-8' "$locale_gen" 2>/dev/null; then
+    echo "en_US.UTF-8 UTF-8" | "${as_root[@]}" tee -a "$locale_gen" >/dev/null
   fi
 
-  # Generate locales
-  ${SUDO:+$SUDO }locale-gen >/dev/null 2>&1
+  "${as_root[@]}" locale-gen >/dev/null 2>&1
 fi
 
-# Set system locale
-echo "LANG=en_US.UTF-8" | ${SUDO:+$SUDO }tee /etc/locale.conf >/dev/null
+echo "LANG=en_US.UTF-8" | "${as_root[@]}" tee "$locale_conf" >/dev/null
 
-# Export locale variables for current session
+# The session that ran this keeps its inherited LANG; everything after it here
+# should see the new one.
 export LANG=en_US.UTF-8
-export LC_ALL=en_US.UTF-8
-export LC_CTYPE=en_US.UTF-8
 
 echo "Locale set to en_US.UTF-8"

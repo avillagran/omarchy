@@ -141,7 +141,8 @@ say() {
 notice() {
   clear_logo
   echo
-  gum spin --spinner "pulse" --title "$1" -- sleep "${2:-2}"
+  printf '%*s\033[32m● \033[0m%s\n' "$PADDING_LEFT" '' "$1"
+  sleep "${2:-2}"
   echo
 }
 
@@ -597,7 +598,7 @@ keyboard_form() {
     confirm_reboot && exec systemctl reboot
   done
 
-  apply_keyboard "$keyboard"
+  apply_keyboard "$keyboard" "${keyboard_xkb_layout:-}" "${keyboard_xkb_variant:-}"
 }
 
 confirm_reboot() {
@@ -614,7 +615,7 @@ confirm_reboot() {
 # keymap localectl doesn't know keeps the default rather than failing (defensive;
 # the picker no longer offers any such layout).
 apply_keyboard() {
-  local keymap="$1"
+  local keymap="$1" xkb_layout="${2:-}" xkb_variant="${3:-}"
   [[ $(tty 2>/dev/null) == /dev/tty* ]] && loadkeys "$keymap" 2>/dev/null || true
 
   if localectl --no-pager list-keymaps 2>/dev/null | grep -qix "$keymap"; then
@@ -623,6 +624,34 @@ apply_keyboard() {
       log_step "could not persist keymap $keymap"
   else
     log_step "keymap $keymap unknown to localectl; keeping the default"
+  fi
+
+  apply_vconsole_xkb "$xkb_layout" "$xkb_variant"
+}
+
+apply_vconsole_xkb() {
+  local xkb_layout="$1" xkb_variant="$2" vconsole=/etc/vconsole.conf
+  [[ -n $xkb_layout ]] || return 0
+
+  if ! localectl --no-convert set-x11-keymap "$xkb_layout" "" "$xkb_variant" >>"$LOG_FILE" 2>&1; then
+    log_step "could not persist X11 keymap $xkb_layout via localectl; writing vconsole.conf directly"
+  fi
+
+  touch "$vconsole"
+  if grep -q '^XKBLAYOUT=' "$vconsole"; then
+    sed -i "s|^XKBLAYOUT=.*|XKBLAYOUT=$xkb_layout|" "$vconsole"
+  else
+    printf 'XKBLAYOUT=%s\n' "$xkb_layout" >>"$vconsole"
+  fi
+
+  if [[ -n $xkb_variant ]]; then
+    if grep -q '^XKBVARIANT=' "$vconsole"; then
+      sed -i "s|^XKBVARIANT=.*|XKBVARIANT=$xkb_variant|" "$vconsole"
+    else
+      printf 'XKBVARIANT=%s\n' "$xkb_variant" >>"$vconsole"
+    fi
+  elif grep -q '^XKBVARIANT=' "$vconsole"; then
+    sed -i '/^XKBVARIANT=/d' "$vconsole"
   fi
 }
 
@@ -676,6 +705,11 @@ user_groups() {
   if [[ -f $PROVISIONING_DIR/groups ]]; then
     while IFS= read -r group; do
       [[ -n $group ]] || continue
+      # Never grant docker at first boot, even if an older install recorded it
+      # (or a factory snapshot predating the opt-in default carries it): the
+      # docker group is root-equivalent. It is opt-in via
+      # omarchy-setup-security-sudoless-docker.
+      [[ $group == "docker" ]] && continue
       getent group "$group" >/dev/null || continue
       [[ ",$groups," == *",$group,"* ]] || groups+=",$group"
     done <"$PROVISIONING_DIR/groups"
