@@ -18,7 +18,7 @@ import pack
 import renderer
 import runtime as runtime_integrity
 from audio import OwnedAudio, hint_labels
-from amiga import owned_window, source_geometry_ready
+from amiga import owned_window
 from history import History
 
 
@@ -203,8 +203,6 @@ def play(process, demo, owner, monitor, appid, log, history, handled, timeout=No
       if shown:
         return handled, 'ended'
       raise ValueError('Emulator stopped before presentation')
-    if status.get('reason') == 'capture-stopped':
-      raise ValueError('Owned capture stopped')
     restored = restore_completed(Path(log.name).read_text(errors='replace'), appid.rsplit('.', 1)[-1])
     if not restored and elapsed > RESTORE_FRAME_DEADLINE_SECONDS:
       raise ValueError('State restoration did not complete; no boot fallback')
@@ -214,18 +212,15 @@ def play(process, demo, owner, monitor, appid, log, history, handled, timeout=No
       # token-bound Wayland toplevel is the exact crash signal for recovery.
       return handled, 'crash'
     if restored and window and not shown:
-      if source_geometry_ready(window):
-        if amiga.ipc('amigaPresent', owner, monitor, appid, demo['title']) != 'ok':
-          raise InterruptedError('Guard refused presentation')
-        shown = True
-      else:
-        selector = 'window="address:' + window['address'] + '"'
-        actions = []
-        if not window.get('floating'):
-          actions.append('hl.dsp.window.float({' + selector + ',action="on"})')
-        actions.append('hl.dsp.window.resize({' + selector + ',x=640,y=480,relative=false})')
-        for action in actions:
-          subprocess.run(['hyprctl', 'dispatch', action], check=True, capture_output=True, timeout=2)
+      # Presentation is the emulator's own compositor-fullscreen window
+      # below the transparent guard overlay. Never gate on screencopy or on
+      # a fixed window geometry: dma-buf negotiation differs per GPU/driver
+      # and fullscreen works from any mapped state.
+      amiga.fullscreen_window(window['address'])
+      if amiga.ipc('amigaPresent', owner, monitor, appid, demo['title']) != 'ok':
+        raise InterruptedError('Guard refused presentation')
+      shown = True
+      print('Amiga presented: ' + demo.get('task_id', '?') + ' ' + demo.get('title', ''), flush=True)
     if shown and revision != status.get('audioRevision') and audio.find() is not None:
       actual = audio.apply(status['requestedMuted'])
       if actual is None:

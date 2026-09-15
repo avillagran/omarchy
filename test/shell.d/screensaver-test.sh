@@ -23,11 +23,13 @@ for (const input of ['Keys.onPressed', 'onPressed', 'onWheel', 'onMotion'])
 assert(!guard.includes('onPositionChanged'), 'absolute compositor warps do not dismiss')
 assert(guard.includes('Qt.BlankCursor') && guard.includes('WlrKeyboardFocus.Exclusive'), 'surface-local cursor and exclusive keys')
 assert(guard.includes('interval: 60000'), 'owned guard has a bounded transition-safe lease')
-assert(guard.includes('color: "black"') && guard.includes('ScreencopyView'), 'opaque owned-toplevel export')
+assert(!guard.includes('ScreencopyView'), 'guard never depends on compositor screencopy')
+assert(guard.includes('covered'), 'guard covers transitions and reveals the fullscreen emulator')
+assert(guard.includes('!root.covered ? "transparent" : "black"'), 'target output goes transparent only while presenting')
 const vm = require('vm')
 const state = {
   token: '', monitorName: '', appId: '', reason: '', dismissed: false, hintOn: 'on', hintOff: 'off',
-  requestedMuted: true, audioMuted: true, audioRevision: 0, frameReady: false,
+  requestedMuted: true, audioMuted: true, audioRevision: 0, frameReady: false, covered: true,
   get active() { return this.token !== '' },
   motion: { ready: true }, lease: { restart() {}, stop() {} },
   titleHint: { restart() {}, stop() {}, running: true }, demoTitle: "",
@@ -43,6 +45,7 @@ assertEqual(state.begin('invalid', 'TEST'), 'busy', 'invalid owner rejected')
 assertEqual(state.begin(owner, 'TEST'), 'ok', 'owned guard opens')
 assertEqual(state.begin('b'.repeat(32), 'TEST'), 'busy', 'second owner rejected')
 assertEqual(state.present(owner, 'TEST', 'org.omarchy.amiga-screensaver.' + owner), 'ok', 'token matched presentation')
+assert(!state.covered && state.frameReady, 'presentation reveals the fullscreen emulator window')
 state.requestNavigation('next')
 assertEqual(JSON.parse(state.poll(owner)).navigationRevision, 1, 'Right requests one navigation revision')
 assertEqual(JSON.parse(state.poll(owner)).navigationDirection, 'next', 'Right requests forward history')

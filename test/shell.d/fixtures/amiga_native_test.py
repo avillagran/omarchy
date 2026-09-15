@@ -207,7 +207,9 @@ class NativeTest(unittest.TestCase):
             return json.dumps({'state': 'active' if len(polls) == 1 else 'dismissed'})
           return 'ok'
         stack.enter_context(patch.object(amiga, 'ipc', side_effect=ipc))
-        stack.enter_context(patch.object(state, 'owned_window', return_value={'floating': True, 'size': [640, 480]}))
+        stack.enter_context(patch.object(state, 'owned_window', return_value={'floating': True, 'size': [640, 480], 'address': '0xabc'}))
+        stack.enter_context(patch.object(amiga, 'fullscreen_window'))
+        stack.enter_context(patch.object(state.subprocess, 'run'))
         audio = stack.enter_context(patch.object(state, 'OwnedAudio'))
         audio.return_value.find.return_value = None
         stack.enter_context(patch.object(state.time, 'sleep'))
@@ -334,7 +336,9 @@ class NativeTest(unittest.TestCase):
           return json.dumps({'state': 'active', 'audioRevision': 0, 'requestedMuted': True})
         return 'ok'
       stack.enter_context(patch.object(amiga, 'ipc', side_effect=ipc))
-      stack.enter_context(patch.object(state, 'owned_window', return_value={'floating': True, 'size': [640, 480]}))
+      stack.enter_context(patch.object(state, 'owned_window', return_value={'floating': True, 'size': [640, 480], 'address': '0xabc'}))
+      stack.enter_context(patch.object(amiga, 'fullscreen_window'))
+      stack.enter_context(patch.object(state.subprocess, 'run'))
       audio = stack.enter_context(patch.object(state, 'OwnedAudio'))
       audio.return_value.find.return_value = object()
       audio.return_value.apply.return_value = {'mute': True}
@@ -365,7 +369,9 @@ class NativeTest(unittest.TestCase):
           return json.dumps({'state': 'active', 'audioRevision': 0, 'requestedMuted': True})
         return 'ok'
       stack.enter_context(patch.object(amiga, 'ipc', side_effect=ipc))
-      stack.enter_context(patch.object(state, 'owned_window', side_effect=[{'floating': True, 'size': [640, 480]}, None]))
+      stack.enter_context(patch.object(state, 'owned_window', side_effect=[{'floating': True, 'size': [640, 480], 'address': '0xabc'}, None]))
+      stack.enter_context(patch.object(amiga, 'fullscreen_window'))
+      stack.enter_context(patch.object(state.subprocess, 'run'))
       audio = stack.enter_context(patch.object(state, 'OwnedAudio'))
       audio.return_value.find.return_value = object()
       audio.return_value.apply.return_value = {'mute': True}
