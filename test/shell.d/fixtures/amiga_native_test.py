@@ -41,7 +41,7 @@ class NativeTest(unittest.TestCase):
     import importlib.util
     self.assertIsNotNone(importlib.util.find_spec('history'), 'Native history module is missing')
     from history import History
-    history = History(3)
+    history = History(3, order=[0, 1, 2])
     self.assertFalse(history.navigate('previous'))
     for expected in [1, 2, 0]:
       self.assertTrue(history.navigate('next'))
@@ -50,6 +50,76 @@ class NativeTest(unittest.TestCase):
     self.assertEqual(history.current, 2)
     history.navigate('next')
     self.assertEqual(history.current, 0)
+
+  def test_random_playlist_visits_every_demo_once_before_wrapping(self):
+    from history import History
+    history = History(7)
+    visited = [history.current]
+    for _ in range(6):
+      self.assertTrue(history.navigate('next'))
+      visited.append(history.current)
+    self.assertEqual(sorted(visited), list(range(7)))
+    self.assertTrue(history.navigate('next'))
+    self.assertEqual(history.current, visited[0])
+
+  def test_new_session_never_starts_with_the_previous_demo(self):
+    from history import History
+    for previous in range(7):
+      history = History(7, excluded=previous)
+      self.assertNotEqual(history.current, previous)
+      self.assertEqual(sorted(history.order), list(range(7)))
+
+  def test_guard_recovery_refuses_a_real_lock_and_retries_transient_loading(self):
+    from unittest.mock import patch
+    import state
+    responses = iter(['preparing', 'input-unavailable', 'ok'])
+    with patch.object(amiga, 'ipc', side_effect=lambda *args: next(responses)), patch.object(state.time, 'sleep'):
+      owner = state.begin_guard('TEST', ('on', 'off'))
+    self.assertRegex(owner, r'^[a-f0-9]{32}$')
+    with patch.object(amiga, 'ipc', return_value='locked'), patch.object(state.time, 'sleep') as sleep:
+      with self.assertRaisesRegex(InterruptedError, 'locked'):
+        state.begin_guard('TEST', ('on', 'off'))
+      self.assertEqual(sleep.call_count, 40)
+
+  def test_canonical_lock_read_fails_closed(self):
+    from unittest.mock import patch
+    import state
+    with patch.object(state.subprocess, 'check_output', return_value='false\n'):
+      self.assertFalse(state.desktop_locked())
+    with patch.object(state.subprocess, 'check_output', return_value='true\n'):
+      self.assertTrue(state.desktop_locked())
+    with patch.object(state.subprocess, 'check_output', side_effect=OSError('no shell')):
+      self.assertTrue(state.desktop_locked())
+
+  def test_rotation_has_a_bounded_timeout(self):
+    import state
+    self.assertEqual(state.MAX_DEMO_SECONDS, 600)
+    self.assertGreater(state.MAX_DEMO_SECONDS, state.PRESENTATION_STARTUP_DEADLINE_SECONDS)
+    self.assertEqual(state.max_demo_seconds({'OMARCHY_AMIGA_MAX_DEMO_SECONDS': '10'}), 10)
+    for value in ('9', '3601', 'forever'):
+      with self.subTest(value=value), self.assertRaisesRegex(ValueError, 'timeout'):
+        state.max_demo_seconds({'OMARCHY_AMIGA_MAX_DEMO_SECONDS': value})
+
+  def test_curated_playback_duration_overrides_the_fallback_timeout(self):
+    import pack
+    import state
+    demo = {'task_id': 'fixture', 'playback': {'schema': 'amiga-playback-v1', 'duration_seconds': 137}}
+    self.assertEqual(pack.playback_duration(demo), 137)
+    self.assertEqual(state.demo_timeout(demo, {'OMARCHY_AMIGA_MAX_DEMO_SECONDS': '600'}), 137)
+    self.assertEqual(state.demo_timeout(demo, {'OMARCHY_AMIGA_MAX_DEMO_SECONDS': '10'}), 10)
+    self.assertEqual(state.demo_timeout({'task_id': 'fixture'}, {'OMARCHY_AMIGA_MAX_DEMO_SECONDS': '600'}), 600)
+
+  def test_playback_metadata_rejects_unbounded_or_unknown_values(self):
+    import pack
+    invalid = (
+      {}, {'schema': 'amiga-playback-v2', 'duration_seconds': 42},
+      {'schema': 'amiga-playback-v1'}, {'schema': 'amiga-playback-v1', 'duration_seconds': 0},
+      {'schema': 'amiga-playback-v1', 'duration_seconds': 3601},
+      {'schema': 'amiga-playback-v1', 'duration_seconds': 42, 'extra': True},
+    )
+    for playback in invalid:
+      with self.subTest(playback=playback), self.assertRaisesRegex(ValueError, 'playback'):
+        pack.playback_duration({'task_id': 'fixture', 'playback': playback})
 
   def test_geometry_requires_observed_float_dimensions(self):
     self.assertFalse(amiga.source_geometry_ready(dict(floating=False, size=[640, 480])))
@@ -168,7 +238,7 @@ class NativeTest(unittest.TestCase):
       for target in ('os.kill', 'os.killpg', 'signal.pidfd_send_signal'):
         stack.enter_context(patch(target, side_effect=AssertionError('unexpected signal')))
       stack.enter_context(patch.object(state, 'runtime_check'))
-      stack.enter_context(patch.object(state.pack, 'load', return_value=[{'task_id': 'fixture', 'state_sha256': 'a' * 64}]))
+      stack.enter_context(patch.object(state.pack, 'load', return_value=[{'task_id': 'fixture', 'title': 'Fixture', 'state_sha256': 'a' * 64}]))
       stack.enter_context(patch.object(amiga, 'hypr', return_value=[{'name': 'TEST', 'focused': True}]))
       def ipc(method, *args):
         events.append(method)
@@ -189,7 +259,7 @@ class NativeTest(unittest.TestCase):
         log.flush()
         if len(tokens) == 3:
           raise InterruptedError('synthetic dismissal')
-        return handled + 1
+        return handled + 1, 'manual'
       stack.enter_context(patch.object(state, 'play', side_effect=play))
       with self.assertRaises(InterruptedError):
         state.run()
@@ -210,7 +280,7 @@ class NativeTest(unittest.TestCase):
         for target in ('os.kill', 'os.killpg', 'signal.pidfd_send_signal'):
           stack.enter_context(patch(target, side_effect=AssertionError('unexpected signal')))
         stack.enter_context(patch.object(state, 'runtime_check'))
-        stack.enter_context(patch.object(state.pack, 'load', return_value=[{'task_id': 'fixture', 'state_sha256': 'a' * 64}]))
+        stack.enter_context(patch.object(state.pack, 'load', return_value=[{'task_id': 'fixture', 'title': 'Fixture', 'state_sha256': 'a' * 64}]))
         stack.enter_context(patch.object(amiga, 'hypr', return_value=[{'name': 'TEST', 'focused': True}]))
         events = []
         def ipc(method, *args):
@@ -245,6 +315,64 @@ class NativeTest(unittest.TestCase):
       with self.assertRaises(InterruptedError):
         state.play(Mock(), {}, 'a' * 32, 'TEST', amiga.APP_CLASS + '.' + 'a' * 32, Mock(), history, 0)
     history.navigate.assert_not_called()
+
+  def test_visible_emulator_exit_advances_but_pre_presentation_exit_fails(self):
+    import contextlib
+    from unittest.mock import Mock, patch
+    import state
+    token = 'a' * 32
+    protocol = ''.join(f'OMARCHY_FRAME_V1 {token} {event}\n' for event in
+                       ('protocol 1', 'restored 1', 'frame 1 7 640 480 0123456789abcdef'))
+    with tempfile.TemporaryDirectory() as tmp, contextlib.ExitStack() as stack:
+      log = Path(tmp) / 'owned.log'
+      log.write_text(protocol)
+      polls = 0
+      def ipc(method, *args):
+        nonlocal polls
+        if method == 'amigaPoll':
+          polls += 1
+          return json.dumps({'state': 'active', 'audioRevision': 0, 'requestedMuted': True})
+        return 'ok'
+      stack.enter_context(patch.object(amiga, 'ipc', side_effect=ipc))
+      stack.enter_context(patch.object(state, 'owned_window', return_value={'floating': True, 'size': [640, 480]}))
+      audio = stack.enter_context(patch.object(state, 'OwnedAudio'))
+      audio.return_value.find.return_value = object()
+      audio.return_value.apply.return_value = {'mute': True}
+      process = Mock()
+      process.poll.side_effect = [None, 0]
+      self.assertEqual(state.play(process, {'title': 'Fixture'}, token, 'TEST', amiga.APP_CLASS + '.' + token,
+                                  type('Log', (), {'name': str(log)})(), Mock(), 0), (0, 'ended'))
+      process.poll.side_effect = [0]
+      with self.assertRaisesRegex(ValueError, 'before presentation'):
+        state.play(process, {'title': 'Fixture'}, token, 'TEST', amiga.APP_CLASS + '.' + token,
+                   type('Log', (), {'name': str(log)})(), Mock(), 0)
+
+  def test_disappeared_owned_window_recovers_when_bwrap_is_still_alive(self):
+    import contextlib
+    from unittest.mock import Mock, patch
+    import state
+    token = 'a' * 32
+    protocol = ''.join(f'OMARCHY_FRAME_V1 {token} {event}\n' for event in
+                       ('protocol 1', 'restored 1', 'frame 1 7 640 480 0123456789abcdef'))
+    with tempfile.TemporaryDirectory() as tmp, contextlib.ExitStack() as stack:
+      log = Path(tmp) / 'owned.log'
+      log.write_text(protocol)
+      polls = 0
+      def ipc(method, *args):
+        nonlocal polls
+        if method == 'amigaPoll':
+          polls += 1
+          return json.dumps({'state': 'active', 'audioRevision': 0, 'requestedMuted': True})
+        return 'ok'
+      stack.enter_context(patch.object(amiga, 'ipc', side_effect=ipc))
+      stack.enter_context(patch.object(state, 'owned_window', side_effect=[{'floating': True, 'size': [640, 480]}, None]))
+      audio = stack.enter_context(patch.object(state, 'OwnedAudio'))
+      audio.return_value.find.return_value = object()
+      audio.return_value.apply.return_value = {'mute': True}
+      process = Mock()
+      process.poll.return_value = None
+      self.assertEqual(state.play(process, {'title': 'Fixture'}, token, 'TEST', amiga.APP_CLASS + '.' + token,
+                                  type('Log', (), {'name': str(log)})(), Mock(), 0), (0, 'crash'))
 
 
 if __name__ == '__main__':

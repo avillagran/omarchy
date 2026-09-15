@@ -49,6 +49,21 @@ def production_title(demo):
   return title
 
 
+def playback_duration(demo):
+  """Return the curator-measured presentation duration, when explicitly set."""
+  playback = demo.get('playback')
+  if playback is None:
+    return None
+  if not isinstance(playback, dict) or set(playback) != {'schema', 'duration_seconds'}:
+    raise ValueError('Invalid playback metadata')
+  if playback.get('schema') != 'amiga-playback-v1':
+    raise ValueError('Unsupported playback metadata')
+  seconds = playback.get('duration_seconds')
+  if type(seconds) is not int or not 1 <= seconds <= 3600:
+    raise ValueError('Invalid playback duration')
+  return seconds
+
+
 def validate_settings(settings):
   # Deliberately narrow pack contract, not FS-UAE's permissive option parser.
   # Validate both parsed input and the final relocated values before emission.
@@ -131,6 +146,7 @@ def load(root=None):
       for key, value in variant['settings'].items():
         if key not in options and settings.get(key) != value:
           raise ValueError('Configuration settings binding mismatch')
+      playback_duration(variant)
       approved.append(dict(variant, source_id=demo['id'], title=production_title(demo),
                            state_path=state, mounts=mounts, settings=settings,
                            root=root, catalog_sha256=sums['catalog.json']))
