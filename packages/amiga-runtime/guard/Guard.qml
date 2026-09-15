@@ -78,7 +78,11 @@ Item {
     if (owner !== token || !active) return "closed"
     token = ""; appId = ""; lease.stop(); closed(owner); return "ok"
   }
-  Timer { id: lease; interval: 10000; onTriggered: { root.reason = "lease-expired"; root.end(root.token) } }
+  // Renderer probing and a fresh saved-state child can legitimately take more
+  // than ten seconds between polls during a shielded transition. The controller
+  // renews this lease whenever it is responsive; an actual lost controller still
+  // releases the guard after this bounded minute.
+  Timer { id: lease; interval: 60000; onTriggered: { root.reason = "lease-expired"; root.end(root.token) } }
   // Classified protocol deltas share Qt's actual wl_pointer/connection.
   // ext-idle-notify cannot exempt M; never infer key identity from timing.
   Native.RelativeMotion {

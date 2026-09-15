@@ -22,7 +22,7 @@ for (const input of ['Keys.onPressed', 'onPressed', 'onWheel', 'onMotion'])
   assert(guard.includes(input), `input guard handles ${input}`)
 assert(!guard.includes('onPositionChanged'), 'absolute compositor warps do not dismiss')
 assert(guard.includes('Qt.BlankCursor') && guard.includes('WlrKeyboardFocus.Exclusive'), 'surface-local cursor and exclusive keys')
-assert(guard.includes('interval: 10000'), 'owned guard lease expires')
+assert(guard.includes('interval: 60000'), 'owned guard has a bounded transition-safe lease')
 assert(guard.includes('color: "black"') && guard.includes('ScreencopyView'), 'opaque owned-toplevel export')
 const vm = require('vm')
 const state = {
@@ -66,6 +66,7 @@ const service = fs.readFileSync(path.join(root, 'shell/plugins/services/idle/Ser
 const launcher = fs.readFileSync(path.join(root, 'bin/omarchy-launch-screensaver'), 'utf8')
 assert(launcher.includes('omarchy-amiga-screensaver.lock') && launcher.includes('flock -n'), 'Default preview refuses overlap with an active Amiga controller')
 assert(service.includes('AmigaScreensaver {'), 'input guard lives inside the native shell, not a background plugin')
+assert(service.includes('runProcess(lockProcess, "lock", "omarchy-system-lock")'), 'idle lock delegates to the real Omarchy authentication command')
 for (const method of ['amigaBegin', 'amigaPoll', 'amigaPresent', 'amigaEnd'])
   assert(service.includes(`function ${method}(`), `idle IPC provides ${method}`)
 // Exercise the actual QML lock guard functions without a compositor or live IPC.

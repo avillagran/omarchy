@@ -39,6 +39,59 @@ def runtime_check():
       raise ValueError('Missing optional dependency: ' + command)
 
 
+# Hardware renderer initialization can precede the first restored frame by tens of seconds.
+# This remains a bounded failure gate; never substitute cold boot when it expires.
+RESTORE_FRAME_DEADLINE_SECONDS = 40
+PRESENTATION_STARTUP_DEADLINE_SECONDS = 45
+# The explicit upper bound guarantees a stuck demo never holds the lock screen
+# forever. A clean owned emulator exit advances sooner; a future curated pack
+# may add verified per-demo endings without weakening this safety ceiling.
+MAX_DEMO_SECONDS = 600
+
+
+def max_demo_seconds(environment=None):
+  value = (environment or os.environ).get('OMARCHY_AMIGA_MAX_DEMO_SECONDS', str(MAX_DEMO_SECONDS))
+  if not re.fullmatch(r'[0-9]+', value):
+    raise ValueError('Invalid Amiga demo timeout')
+  seconds = int(value)
+  if not 10 <= seconds <= 3600:
+    raise ValueError('Amiga demo timeout must be between 10 and 3600 seconds')
+  return seconds
+
+
+def demo_timeout(demo, environment=None):
+  """Use a signed curator measurement, capped by the operator safety ceiling."""
+  maximum = max_demo_seconds(environment)
+  duration = pack.playback_duration(demo)
+  return min(duration, maximum) if duration is not None else maximum
+
+
+def begin_guard(monitor, labels):
+  """Open a fresh guard only while the desktop reports an unlocked session."""
+  owner = uuid.uuid4().hex
+  last_result = 'unavailable'
+  for attempt in range(40):
+    result = amiga.ipc('amigaBegin', owner, monitor, *labels)
+    last_result = result
+    if result == 'ok':
+      return owner
+    # The bounded shell lock probe fails closed while a reply is in flight.
+    # Retry that transient state, but never resume after a persistent real lock.
+    if result not in ('preparing', 'input-unavailable', 'locked'):
+      raise InterruptedError('Guard unavailable: ' + result)
+    time.sleep(.1)
+  raise InterruptedError('Guard unavailable: ' + last_result)
+
+
+def desktop_locked():
+  """Read the canonical lock service; unknown results must remain locked."""
+  try:
+    output = subprocess.check_output(['omarchy-shell', 'lock', 'isLocked'], text=True, timeout=2).strip()
+  except (OSError, subprocess.SubprocessError):
+    return True
+  return output != 'false'
+
+
 def restore_completed(text, token=None):
   # These stock diagnostics can precede a successful completion callback.
   # Reject them anywhere in the child log, including after initial completion.
@@ -130,25 +183,36 @@ def sandbox_command(demo, temporary, token):
                     '--notification-duration=0', '--suppress-warning-hud=1']
 
 
-def play(process, demo, owner, monitor, appid, log, history, handled):
+def play(process, demo, owner, monitor, appid, log, history, handled, timeout=None):
   start, shown, revision = time.monotonic(), False, None
+  timeout = demo_timeout(demo) if timeout is None else timeout
   audio = OwnedAudio(appid, os.environ)
   while True:
     elapsed = time.monotonic() - start
     status = json.loads(amiga.ipc('amigaPoll', owner))
     if status.get('state') != 'active':
+      if status.get('reason') == 'locked' and not desktop_locked():
+        raise ValueError('Transient guard lock lease lost')
       raise InterruptedError('Guard stopped: ' + status.get('reason', 'closed'))
     navigation = status.get('navigationRevision', 0)
     if navigation != handled:
       handled = navigation
       if history.navigate(status['navigationDirection']):
-        return handled
-    if process.poll() is not None or status.get('reason') == 'capture-stopped':
-      raise ValueError('Emulator or owned capture stopped')
+        return handled, 'manual'
+    if process.poll() is not None:
+      if shown:
+        return handled, 'ended'
+      raise ValueError('Emulator stopped before presentation')
+    if status.get('reason') == 'capture-stopped':
+      raise ValueError('Owned capture stopped')
     restored = restore_completed(Path(log.name).read_text(errors='replace'), appid.rsplit('.', 1)[-1])
-    if not restored and elapsed > 10:
+    if not restored and elapsed > RESTORE_FRAME_DEADLINE_SECONDS:
       raise ValueError('State restoration did not complete; no boot fallback')
     window = owned_window(appid, process)
+    if shown and window is None:
+      # bwrap can outlive a SIGKILLed emulator child briefly. The disappeared
+      # token-bound Wayland toplevel is the exact crash signal for recovery.
+      return handled, 'crash'
     if restored and window and not shown:
       if source_geometry_ready(window):
         if amiga.ipc('amigaPresent', owner, monitor, appid, demo['title']) != 'ok':
@@ -168,10 +232,10 @@ def play(process, demo, owner, monitor, appid, log, history, handled):
         raise ValueError('Owned audio disappeared')
       if amiga.ipc('amigaAudioApplied', owner, str(status['audioRevision']), str(actual['mute']).lower()) == 'ok':
         revision = status['audioRevision']
-    if elapsed > 15 and (not shown or not status.get('frameReady') or revision is None):
+    if elapsed > PRESENTATION_STARTUP_DEADLINE_SECONDS and (not shown or not status.get('frameReady') or revision is None):
       raise ValueError('Restored frame/audio startup deadline exceeded')
-    # This pack has no verified ending contract. Stay on the restored demo until
-    # classified dismissal or explicit navigation; elapsed time is NOT completion.
+    if shown and elapsed >= timeout:
+      return handled, 'timeout'
     time.sleep(.1)
 
 
@@ -186,43 +250,68 @@ def run():
       fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
     except BlockingIOError:
       return 0
-    owner = uuid.uuid4().hex
     monitor = next(m['name'] for m in amiga.hypr('monitors') if m.get('focused'))
     logdir = Path.home() / '.local/state/omarchy/amiga'
     logdir.mkdir(parents=True, exist_ok=True)
     begun = False
+    owner = ''
     try:
       labels = hint_labels(json.loads(amiga.ipc('amigaLocale')))
-      for attempt in range(40):
-        result = amiga.ipc('amigaBegin', owner, monitor, *labels)
-        if result == 'ok':
-          begun = True
-          break
-        if result not in ('preparing', 'locked', 'input-unavailable'):
-          raise ValueError('Native guard unavailable: ' + result)
-        time.sleep(.1)
-      if not begun:
-        raise ValueError('Native input/lock guard unavailable')
-      history, handled, generation = History(len(choices)), 0, 0
+      owner = begin_guard(monitor, labels)
+      begun = True
+      previous = None
+      session = logdir / 'session.json'
+      with contextlib.suppress(OSError, ValueError, KeyError, StopIteration):
+        previous_task = json.loads(session.read_text())['task_id']
+        previous = next(index for index, demo in enumerate(choices) if demo['task_id'] == previous_task)
+      history, handled, generation, consecutive_failures = History(len(choices), excluded=previous), 0, 0, 0
+      transitions = logdir / 'transitions.jsonl'
       while True:
         demo = choices[history.current]
         generation += 1
+        transition, failure = None, None
         with tempfile.TemporaryDirectory(prefix='omarchy-amiga-', dir=runtime) as temporary:
           with (logdir / 'emulator.log').open('w') as log:
             token = uuid.uuid4().hex
             command = sandbox_command(demo, temporary, token)
             process = amiga.launch_command(command, log)
             try:
-              (logdir / 'session.json').write_text(json.dumps({'owner': owner, 'task_id': demo['task_id'],
+              session.write_text(json.dumps({'owner': owner, 'task_id': demo['task_id'],
                 'generation': generation, 'controller_pid': os.getpid(), 'child_pid': process.pid,
                 'state_sha256': demo['state_sha256'], 'mode': 'state-only', 'command': command,
                 'renderer': json.loads((Path(temporary) / 'renderer.json').read_text()),
-                'history': history.items, 'cursor': history.cursor}, indent=2))
-              handled = play(process, demo, owner, monitor, amiga.APP_CLASS + '.' + token, log, history, handled)
+                'history': history.items, 'order': history.order, 'cursor': history.cursor}, indent=2))
+              handled, transition = play(process, demo, owner, monitor, amiga.APP_CLASS + '.' + token, log, history, handled)
               if amiga.ipc('amigaCover', owner) != 'ok':
                 raise InterruptedError('Guard refused transition cover')
+            except ValueError as error:
+              failure = str(error)
+              if amiga.ipc('amigaCover', owner) != 'ok':
+                # An emulator failure must not leave an unlocked desktop with a
+                # dead guard. Re-open an owned guard and continue to the next
+                # candidate; begin_guard fails closed if the real lock engaged.
+                with contextlib.suppress(Exception):
+                  amiga.ipc('amigaEnd', owner)
+                owner = begin_guard(monitor, labels)
             finally:
               amiga.stop(process)
+        if failure is not None:
+          consecutive_failures += 1
+          transition = 'failure'
+          if consecutive_failures >= len(choices):
+            raise ValueError('Every eligible Amiga demo failed during this session')
+        else:
+          consecutive_failures = 0
+        with transitions.open('a') as stream:
+          stream.write(json.dumps({
+            'at': time.time(), 'generation': generation, 'task_id': demo['task_id'],
+            'title': demo['title'], 'reason': transition, 'error': failure,
+            'max_demo_seconds': max_demo_seconds(), 'scheduled_seconds': demo_timeout(demo),
+          }, sort_keys=True) + '\n')
+        # Manual next/previous already updates History inside play(). Every
+        # normal completion, timeout and recoverable failure advances exactly once.
+        if transition != 'manual':
+          history.navigate('next')
     finally:
       if begun:
         with contextlib.suppress(Exception):
