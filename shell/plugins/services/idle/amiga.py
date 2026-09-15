@@ -89,3 +89,40 @@ def owned_window(appid, process):
 
 def source_geometry_ready(window):
   return window.get('floating') is True and window.get('size') == [640, 480]
+
+
+def _fullscreen_confirmed(address):
+  try:
+    for client in hypr('clients'):
+      if client.get('address') == address:
+        # Hyprland generations encode the mode differently (1 vs 2); any
+        # nonzero fullscreen state presents the emulator across the output.
+        return client.get('fullscreen', 0) != 0
+  except (OSError, subprocess.SubprocessError, ValueError):
+    pass
+  return False
+
+
+def fullscreen_window(address):
+  """Fullscreen the owned emulator window, tolerant of Hyprland generations.
+
+  Omarchy always ships Hyprland, but the dispatcher syntax changed when the
+  Lua config API landed. Use the Lua form with an explicit idempotent
+  action="set" and verify the resulting client state; verification matters
+  because a param-level failure can still exit zero. Fall back to the classic
+  focus+fullscreen pair for older builds.
+  """
+  if not re.fullmatch(r'0x[0-9a-fA-F]+', address):
+    raise ValueError('Invalid owned window address')
+  target = 'address:' + address
+  for _ in range(3):
+    subprocess.run(['hyprctl', 'dispatch',
+                    'hl.dsp.window.fullscreen({ window = "' + target + '", action = "set", mode = "fullscreen" })'],
+                   capture_output=True, timeout=3)
+    if _fullscreen_confirmed(address):
+      return
+  with contextlib.suppress(subprocess.SubprocessError):
+    subprocess.run(['hyprctl', 'dispatch', 'focuswindow', target], capture_output=True, timeout=3)
+    subprocess.run(['hyprctl', 'dispatch', 'fullscreen', '1'], capture_output=True, timeout=3)
+  if not _fullscreen_confirmed(address):
+    raise ValueError('Compositor refused fullscreen for the owned emulator window')
