@@ -37,9 +37,17 @@ def inventory(root):
     path = contained(root, match[2])
     if not path.is_file() or digest(path) != match[1]:
       raise ValueError('Pack checksum mismatch: ' + match[2])
-  if 'catalog.json' not in sums:
-    raise ValueError('Unbound pack catalog')
   return sums
+
+
+def demo_path(production_id, value):
+  """Resolve a checksum-bound path relative to one production folder."""
+  if not isinstance(value, str) or not value:
+    raise ValueError('Invalid per-demo path')
+  path = PurePosixPath(value)
+  if path.is_absolute() or '..' in path.parts or str(path) != value:
+    raise ValueError('Invalid per-demo path')
+  return production_id + '/' + value
 
 
 def production_title(demo):
@@ -94,27 +102,40 @@ def validate_settings(settings):
 def load(root=None):
   root = Path(root) if root is not None else Path.home() / 'Wallpapers/AMIGA'
   sums = inventory(root)
-  catalog = json.loads((root / 'catalog.json').read_text())
-  if catalog.get('schema') != 'amiga-fullpack-v1' or catalog.get('edition') != 'top-minimal':
-    raise ValueError('Unsupported pack: expected amiga-fullpack-v1 top-minimal')
+  configs = sorted(path for path in sums if PurePosixPath(path).name == 'config.json')
+  if not configs:
+    raise ValueError('No checksum-bound per-demo config.json files')
   records, ids, tasks = [], set(), set()
-  for demo in catalog['demos']:
-    if demo['id'] in ids or '/' in demo['id'] or demo['id'] in ('.', '..'):
+  for config_name in configs:
+    parts = PurePosixPath(config_name).parts
+    if len(parts) != 2:
+      raise ValueError('config.json must live directly inside its production folder')
+    production_id = parts[0]
+    demo = json.loads(contained(root, config_name).read_text())
+    if demo.get('schema') != 'amiga-demo-v1' or demo.get('id') != production_id:
+      raise ValueError('Invalid per-demo production ID')
+    if production_id in ids or production_id in ('.', '..'):
       raise ValueError('Invalid or duplicate production ID')
-    ids.add(demo['id'])
-    if demo['preview'] not in sums:
+    ids.add(production_id)
+    preview = demo_path(production_id, demo.get('preview'))
+    if preview not in sums:
       raise ValueError('Unbound preview')
     approved = []
-    for variant in demo['variants']:
-      if variant['task_id'] in tasks:
+    for source_variant in demo.get('variants', []):
+      variant = dict(source_variant)
+      variant['config'] = demo_path(production_id, variant.get('config'))
+      variant['state'] = demo_path(production_id, variant.get('state'))
+      variant['media'] = [dict(media, path=demo_path(production_id, media.get('path')))
+                          for media in variant.get('media', [])]
+      if variant.get('task_id') in tasks:
         raise ValueError('Duplicate configuration ID')
-      tasks.add(variant['task_id'])
+      tasks.add(variant.get('task_id'))
       if variant.get('review_status') != 'Ok':
         raise ValueError('Top pack contains a non-approved configuration')
       for key in ('config', 'state'):
         if variant[key] not in sums:
           raise ValueError('Unbound configuration or state')
-      if sums[variant['state']] != variant['state_sha256']:
+      if sums[variant['state']] != variant.get('state_sha256'):
         raise ValueError('State binding mismatch')
       state = contained(root, variant['state'])
       with state.open('rb') as stream:
@@ -147,23 +168,12 @@ def load(root=None):
         if key not in options and settings.get(key) != value:
           raise ValueError('Configuration settings binding mismatch')
       playback_duration(variant)
-      approved.append(dict(variant, source_id=demo['id'], title=production_title(demo),
-                           state_path=state, mounts=mounts, settings=settings,
-                           root=root, catalog_sha256=sums['catalog.json']))
+      approved.append(dict(variant, source_id=production_id, title=production_title(demo), preview_path=contained(root, preview),
+                           state_path=state, mounts=mounts, settings=settings, root=root,
+                           config_sha256=sums[config_name]))
     if not approved:
       raise ValueError('Production has no approved state')
-    # Prefer the approved primary, never infer approval from destination flags.
-    records.append(next((r for r in approved if r.get('attempt') == 'primary'), approved[0]))
-  if not records:
-    raise ValueError('Empty Top pack')
-  expected = catalog.get('counts')
-  if not isinstance(expected, dict):
-    raise ValueError('Catalog counts are required')
-  for key in ('demos', 'configurations'):
-    if type(expected.get(key)) is not int or expected[key] < 1:
-      raise ValueError('Catalog count must be a positive integer: ' + key)
-  if expected['demos'] != len(ids) or expected['configurations'] != len(tasks):
-    raise ValueError('Catalog totals disagree with records')
+    records.append(next((record for record in approved if record.get('attempt') == 'primary'), approved[0]))
   return records
 
 
