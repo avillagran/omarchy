@@ -22,7 +22,7 @@
 #include "ttfx_plymouth.h"
 
 #define FRAME_INTERVAL_SECONDS (1.0 / 240.0)
-#define ENGINE_STEPS_PER_TICK 1U
+#define ENGINE_STEPS_PER_TICK 2U
 #define FINAL_DRAW_WAIT_NS UINT64_C(250000000)
 #define BACKGROUND_COLOR 0x0b0d10U
 #define LOGO_COLOR 0xf4f4f5U

@@ -43,6 +43,7 @@ void ttfx_handoff_close(int directory);
 #define TTFX_REACTION_TICKS 168U
 #define TTFX_FAILURE_CANDIDATE_TICKS 1200U
 #define TTFX_REACTION_OFFSET_TICKS 24U
+#define TTFX_PLAYBACK_STEPS_PER_TICK 2U
 #define TTFX_FAST_FORWARD_STEPS_PER_TICK 8U
 
 typedef enum {

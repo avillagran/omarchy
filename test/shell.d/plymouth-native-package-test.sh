@@ -46,7 +46,7 @@ module="$tmp/pkg/usr/lib/plymouth/ttfx-plymouth.so"
 descriptor="$tmp/pkg/usr/share/plymouth/themes/omarchy/omarchy.plymouth"
 recovery="$tmp/pkg/usr/share/plymouth/themes/omarchy-static/omarchy-static.plymouth"
 [[ -f $module ]] || fail "stage writes the current ModuleName path"
-[[ $(stat -c %a "$module") == "644" ]] || fail "staged module mode is 0644"
+[[ $(stat -c %a "$module") == "755" ]] || fail "staged module is executable for mkinitcpio add_binary"
 grep -Fx 'ModuleName=ttfx-plymouth' "$descriptor" >/dev/null || fail "native descriptor selects the staged module"
 for entry in 'Enabled=true' 'Mode=fixed' 'Effect=decrypt' 'Seed=22321466108495961' 'PlaybackMode=submit-to-finish'; do
   grep -Fx "$entry" "$descriptor" >/dev/null || fail "native package default is exact decrypt tuple: $entry"

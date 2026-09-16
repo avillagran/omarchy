@@ -335,6 +335,15 @@ install_module() {
   committed=false
   rollback_failed=0
 
+  # Plymouth 26's setter cannot insert [Daemon] into a zero-byte file: sed's
+  # line-addressed insertion never runs when there are no input lines. Ensure
+  # the configuration is parseable before selecting recovery/native themes.
+  install -d -m 0755 "$system_root/etc/plymouth"
+  if [[ ! -s $system_root/etc/plymouth/plymouthd.conf ]]; then
+    printf '[Daemon]\n' >"$system_root/etc/plymouth/plymouthd.conf"
+    chmod 0644 "$system_root/etc/plymouth/plymouthd.conf"
+  fi
+
   check_abi
   [[ -f $theme_dir/omarchy.plymouth && -f $theme_dir/omarchy.script ]] || { echo "installed Omarchy theme is incomplete" >&2; return 1; }
   canonical_template=$(validate_native_template)
@@ -427,7 +436,7 @@ install_module() {
   if $test_mode && [[ -n ${OMARCHY_PLYMOUTH_TEST_AFTER_OPEN_COMMAND:-} ]]; then
     "$OMARCHY_PLYMOUTH_TEST_AFTER_OPEN_COMMAND"
   fi
-  install -m 0644 "/proc/self/fd/$source_fd" "$work/ttfx-plymouth.so"
+  install -m 0755 "/proc/self/fd/$source_fd" "$work/ttfx-plymouth.so"
   exec {source_fd}<&-
   source_fd=
   if ! $test_mode; then
@@ -446,7 +455,7 @@ install_module() {
   transaction_active=true
 
   module_stage=$(mktemp --tmpdir="${module_path%/*}" '.ttfx-plymouth.so.XXXXXXXX')
-  install -m 0644 "$work/ttfx-plymouth.so" "$module_stage"
+  install -m 0755 "$work/ttfx-plymouth.so" "$module_stage"
   if ! $test_mode; then
     chown 0:0 "$module_stage"
   fi

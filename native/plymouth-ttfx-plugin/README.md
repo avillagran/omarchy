@@ -35,7 +35,7 @@ The phase handoff protocol is version 2. It publishes `playback=hold-final` for
 Input Only and `playback=continuous` for Full Animated. A compatible desktop
 bridge must retain a hold-final snapshot without advancing or looping the TTFX
 engine; this prevents a second animation cycle while the compositor reaches the
-desktop.
+desktop. Normal playback advances two engine steps per 240 Hz tick (2x).
 
 At `become_idle`, the optional `/run/omarchy-plymouth-handoff.raw` publisher uses the same trusted root-owned tmpfs directory fd as the phase exporter. It atomically renames a newly created regular file to mode 0644. Initialization, invalid publication, and phase-publication failure remove stale raw state. No runtime path or environment override is supported.
 

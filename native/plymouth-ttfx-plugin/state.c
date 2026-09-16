@@ -127,7 +127,8 @@ bool ttfx_handoff_publish(int directory, const ttfx_handoff_t *h)
         if (directory < 0)
                 return false;
         if (h == NULL || h->effect == NULL || h->phase.step > TTFX_HANDOFF_MAX_STEP ||
-            h->width != 162U || h->height != 20U || h->fps != 240U || h->speed != 1U ||
+            h->width != 162U || h->height != 20U || h->fps != 240U ||
+            h->speed != TTFX_PLAYBACK_STEPS_PER_TICK ||
             h->background > 0xffffffU || h->foreground > 0xffffffU)
                 goto fail;
         while (length < 128U && h->effect[length] != '\0') {
@@ -337,7 +338,7 @@ unsigned int ttfx_state_engine_steps_per_tick(const ttfx_state_t *state)
 {
         if (state->playback_mode == TTFX_PLAYBACK_CONTINUOUS ||
             state->playback_phase == TTFX_PLAYBACK_INPUT)
-                return 1U;
+                return TTFX_PLAYBACK_STEPS_PER_TICK;
         if (state->playback_phase == TTFX_PLAYBACK_FAST_FORWARD)
                 return TTFX_FAST_FORWARD_STEPS_PER_TICK;
         return 0U;

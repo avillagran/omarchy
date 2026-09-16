@@ -32,7 +32,7 @@ int main(void)
         ttfx_handoff_t handoff = {
                 .effect = "vhstape", .seed = UINT64_MAX,
                 .phase = {.step = 17, .cycle = 2},
-                .width = 162, .height = 20, .fps = 240, .speed = 1,
+                .width = 162, .height = 20, .fps = 240, .speed = 2,
                 .background = 0x0b0d10, .foreground = 0xf4f4f5,
                 .hold_final = true
         };
@@ -46,7 +46,7 @@ int main(void)
         assert(read(file, text, sizeof(text) - 1) == st.st_size);
         close(file);
         assert(strstr(text, "version=2\neffect=vhstape\nseed=18446744073709551615\ncycle=2\nstep=17\n") != NULL);
-        assert(strstr(text, "fps=240\nspeed=1\n") != NULL);
+        assert(strstr(text, "fps=240\nspeed=2\n") != NULL);
         assert(strstr(text, "width=162\nheight=20\n") != NULL);
         assert(strstr(text, "input=embedded-logo-v2\n") != NULL);
         assert(strstr(text, "playback=hold-final\n") != NULL);

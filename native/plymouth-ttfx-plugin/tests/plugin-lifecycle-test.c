@@ -886,13 +886,16 @@ static void test_wrong_password_composites_horizontal_red_reaction_without_engin
                 assert(image_composite_y == entry_y + (48L - 38L) / 2L);
                 assert(last_entry_show_x == entry_x + expected_offset);
                 assert(last_entry_show_y == entry_y);
-                assert(engine_creates == 1U && engine_steps == tick &&
+                assert(engine_creates == 1U &&
+                       engine_steps == tick * TTFX_PLAYBACK_STEPS_PER_TICK &&
                        engine_frees == 0U);
                 loop.timeout_handler(loop.timeout_data, &loop);
         }
         assert(!ttfx_state_reaction_active(&plugin->state));
-        assert(engine_creates == 1U && engine_steps == TTFX_REACTION_TICKS && engine_frees == 0U);
-        assert(plugin->phase.step == TTFX_REACTION_TICKS);
+        assert(engine_creates == 1U &&
+               engine_steps == TTFX_REACTION_TICKS * TTFX_PLAYBACK_STEPS_PER_TICK &&
+               engine_frees == 0U);
+        assert(plugin->phase.step == TTFX_REACTION_TICKS * TTFX_PLAYBACK_STEPS_PER_TICK);
 
         captured_count = 0U;
         glitch_red_fills = 0U;
@@ -1026,7 +1029,7 @@ static void test_question_prompt_keeps_required_text_label(void)
         destroy_plugin(plugin);
 }
 
-static void test_one_global_engine_steps_once_per_240hz_timeout_not_draw(void)
+static void test_one_global_engine_advances_2x_per_240hz_timeout_not_draw(void)
 {
         ply_event_loop_t loop = {0};
         ply_pixel_display_t first = {.width = 1280U, .height = 720U};
@@ -1054,8 +1057,8 @@ static void test_one_global_engine_steps_once_per_240hz_timeout_not_draw(void)
         assert(loop.timeout_handler != NULL);
         unsigned int draws_before_tick = draw_requests;
         loop.timeout_handler(loop.timeout_data, &loop);
-        assert(engine_steps == 1U);
-        assert(engine_cells_calls == 2U);
+        assert(engine_steps == TTFX_PLAYBACK_STEPS_PER_TICK);
+        assert(engine_cells_calls == 1U + TTFX_PLAYBACK_STEPS_PER_TICK);
         assert(loop.timeout_watches == 2U);
         assert(draw_requests == draws_before_tick + 2U);
         destroy_plugin(plugin);
@@ -1111,7 +1114,7 @@ static void test_continuous_playback_keeps_the_previous_looping_behavior(void)
         assert(engine_steps == 1U);
         assert(plugin->state.playback_phase == TTFX_PLAYBACK_INPUT);
         on_timeout(plugin, &loop);
-        assert(engine_steps == 2U);
+        assert(engine_steps == 1U + TTFX_PLAYBACK_STEPS_PER_TICK);
         destroy_plugin(plugin);
 }
 
@@ -1758,20 +1761,20 @@ static void test_idle_captures_drawn_not_pending_phase(void)
         ply_boot_splash_plugin_t *plugin = create_plugin(&configured);
         add_pixel_display(plugin, &display);
         assert(show_splash_screen(plugin, &loop, NULL, 0));
-        mock_loop_on_step = 2U;
+        mock_loop_on_step = 4U;
         on_timeout(plugin, &loop);
         display.draw_handler(display.draw_data, &buffer, 0, 0, 1280, 720, &display);
-        assert(plugin->drawn_phase.step == 1U && plugin->drawn_phase.cycle == 0U);
+        assert(plugin->drawn_phase.step == 2U && plugin->drawn_phase.cycle == 0U);
         TtfxCell visible = plugin->cells[0];
         on_timeout(plugin, &loop); /* damage is queued, not drawn */
         mock_cells[0].codepoint = 'X';
         become_idle(plugin, &trigger);
         assert(plugin->phase.step == 0U && plugin->phase.cycle == 1U);
-        assert(plugin->drawn_phase.step == 1U);
+        assert(plugin->drawn_phase.step == 2U);
         assert(!plugin->handoff_published); /* unprivileged /run: visual freeze still succeeds */
         assert(plugin->cells[0].codepoint == visible.codepoint);
         on_timeout(plugin, &loop);
-        assert(engine_steps == 2U);
+        assert(engine_steps == 4U);
         become_idle(plugin, &trigger);
         assert(trigger.pulls == 2U);
         destroy_plugin(plugin);
@@ -1804,8 +1807,8 @@ static void test_idle_publishes_exact_phase_once(void)
         char text[TTFX_HANDOFF_MAX_BYTES] = {0};
         assert(file >= 0 && read(file, text, sizeof(text) - 1) > 0);
         close(file);
-        assert(strstr(text, "cycle=0\nstep=1\n") != NULL);
-        assert(strstr(text, "fps=240\nspeed=1\n") != NULL);
+        assert(strstr(text, "cycle=0\nstep=2\n") != NULL);
+        assert(strstr(text, "fps=240\nspeed=2\n") != NULL);
         assert(strstr(text, "playback=continuous\n") != NULL);
         ttfx_handoff_clear(plugin->handoff_directory);
         become_idle(plugin, &trigger);
@@ -1868,7 +1871,7 @@ static void test_raw_capture_guards_and_freeze(void)
                                        raw_little(raw + offset, 4U) !=
                                                (SECRET_LABEL_PIXEL & UINT32_C(0xffffff)));
                         assert(plugin->drawn_phase.step == 0);
-                        assert(plugin->phase.step == 1U);
+                        assert(plugin->phase.step == TTFX_PLAYBACK_STEPS_PER_TICK);
                         close(fd);
                 } else assert(fd < 0);
                 ttfx_handoff_clear(plugin->handoff_directory);
@@ -2058,7 +2061,7 @@ int main(void)
         test_single_step_tick_stops_on_failure_and_degraded_state();
         test_block_geometry_and_full_background();
         test_letter_uses_detailed_glyph_mask();
-        test_one_global_engine_steps_once_per_240hz_timeout_not_draw();
+        test_one_global_engine_advances_2x_per_240hz_timeout_not_draw();
         test_default_input_only_plays_once_and_freezes();
         test_continuous_playback_keeps_the_previous_looping_behavior();
         test_wrong_password_does_not_restart_input_only_playback();

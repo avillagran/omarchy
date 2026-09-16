@@ -308,9 +308,10 @@ ImageDir=/usr/share/plymouth/themes/omarchy
 ScriptFile=/usr/share/plymouth/themes/omarchy/omarchy.script
 EOF
 env "${env_common[@]}" "$installer" --module "$module_source" >"$tmp/out" 2>"$tmp/err" || fail "native install succeeds" "$(cat "$tmp/err")"
+grep -Fx '[Daemon]' "$root/etc/plymouth/plymouthd.conf" >/dev/null || fail "installer repairs an empty Plymouth configuration before theme activation"
 grep -E "^$root/usr/lib/plymouth/[.]ttfx-plymouth[.]so[.]" "$tmp/file-log" >/dev/null || fail "module is validated on destination filesystem before atomic publication"
 cmp -s "$module_source" "$root/usr/lib/plymouth/ttfx-plymouth.so" || fail "successful install publishes new module"
-[[ $(stat -c %a "$root/usr/lib/plymouth/ttfx-plymouth.so") == "644" ]] || fail "installed module is mode 0644"
+[[ $(stat -c %a "$root/usr/lib/plymouth/ttfx-plymouth.so") == "755" ]] || fail "installed module is executable for mkinitcpio add_binary"
 [[ $(<"$tmp/current-theme") == "omarchy" ]] || fail "successful install activates native descriptor"
 [[ $(<"$root/boot/EFI/Linux/omarchy_linux.efi") == "uki:omarchy" ]] || fail "successful install commits rebuilt UKI"
 for entry in '[ttfx]' 'Enabled=true' 'Mode=fixed' 'Effect=decrypt' 'Seed=22321466108495961' 'PlaybackMode=submit-to-finish' 'BackgroundColor=1a1b26'; do
