@@ -5,6 +5,7 @@
 set -euo pipefail
 
 current=$(omarchy-plymouth-effect-set current)
+[[ $current == off ]] && current=decrypt
 options=()
 declare -A option_keys=()
 mapfile -t effects < <(omarchy-plymouth-effect-list)
@@ -18,7 +19,6 @@ add_option() {
 
 case $current in
 random) add_option "Random" "random" ;;
-off) add_option "Off" "off" ;;
 *)
   for effect in "${effects[@]}"; do
     if [[ $effect == "$current" ]]; then
@@ -29,7 +29,6 @@ off) add_option "Off" "off" ;;
   ;;
 esac
 [[ $current == random ]] || add_option "Random" "random"
-[[ $current == off ]] || add_option "Off" "off"
 for effect in "${effects[@]}"; do
   [[ $effect == "$current" ]] || add_option "${effect^}" "$effect"
 done

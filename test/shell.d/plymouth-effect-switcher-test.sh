@@ -13,7 +13,7 @@ mkdir -p "$fake_bin"
 cat >"$fake_bin/omarchy-plymouth-effect-set" <<'SH'
 #!/bin/bash
 [[ ${1:-} == current ]] || exit 2
-printf 'errorcorrect\n'
+printf '%s\n' "${TEST_CURRENT:-errorcorrect}"
 SH
 cat >"$fake_bin/omarchy-plymouth-effect-list" <<'SH'
 #!/bin/bash
@@ -38,6 +38,12 @@ pass "effect switcher puts the checked current effect first"
 
 [[ $(sed -n '2p' "$options_file") == $'·\tRandom' ]] ||
   fail "effect switcher keeps Random after the current effect"
-[[ $(sed -n '3p' "$options_file") == $'·\tOff' ]] ||
-  fail "effect switcher keeps Off after Random"
-pass "effect switcher keeps every alternative after the checked current effect"
+! grep -F $'\tOff' "$options_file" >/dev/null || fail "effect switcher removes Off"
+pass "effect switcher keeps alternatives without Off"
+
+PATH="$fake_bin:$PATH" TEST_CURRENT=off TEST_OPTIONS_FILE="$options_file" \
+  "$ROOT/bin/omarchy-plymouth-effect-switcher" >/dev/null
+[[ $(sed -n '1p' "$options_file") == $'✓\tDecrypt' ]] ||
+  fail "legacy Off state is presented as the Decrypt default"
+! grep -F $'\tOff' "$options_file" >/dev/null || fail "legacy Off state does not restore Off"
+pass "effect switcher defaults legacy Off state to Decrypt"
