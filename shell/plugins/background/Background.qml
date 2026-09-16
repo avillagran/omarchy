@@ -243,6 +243,21 @@ Item {
         && String(Quickshell.screens[0].name || "") === String(modelData.name || "")
 
       property bool maskReady: false
+      property bool handoffReadyReported: false
+
+      function maybeReportHandoffReady() {
+        if (handoffReadyReported || !panel.visible || !root.displayedBackground) return
+        if (root.incomingBackground || root.finishingTransition || root.revealProgress < 1) return
+        if (!base.ready) return
+        handoffReadyReported = true
+        handoffReadyProc.running = true
+      }
+
+      Process {
+        id: handoffReadyProc
+        running: false
+        command: ["sh", "-c", "set -eu; n=$1; case $n in ''|*[!A-Za-z0-9._-]*) exit 1;; esac; d=${XDG_RUNTIME_DIR:?}; umask 077; t=$d/.omarchy-wallpaper-ready.$n.$$; trap 'rm -f -- \"$t\"' EXIT; printf 'status=frame-ready\\nmonitor=%s\\n' \"$n\" >\"$t\"; chmod 600 \"$t\"; mv -f -- \"$t\" \"$d/omarchy-wallpaper-ready.$n\"; trap - EXIT", "sh", String(modelData.name || "")]
+      }
 
       function maybeStartReveal() {
         if (!root.incomingBackground || root.revealProgress !== 0 || maskReady) return
@@ -348,6 +363,11 @@ Item {
           panel.maskReady = false
           panel.maybeStartReveal()
         }
+      }
+
+      FrameAnimation {
+        running: true
+        onTriggered: panel.maybeReportHandoffReady()
       }
 
       MouseArea {

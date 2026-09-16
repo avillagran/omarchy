@@ -342,6 +342,39 @@ assertEqual(
   'menu exposes Menu Bar transparency as a toggle'
 )
 assertDeepEqual(
+  defaultItems.filter(item => item.parent === 'style.bootloader').map(item => item.label),
+  ['Full Animated', 'Input Only', 'Effect'],
+  'menu groups bootloader playback and effect controls under Style > Bootloader'
+)
+assert(
+  defaultById['style.bootloader.full-animated'].action.includes('omarchy-plymouth-playback-set full-animated')
+    && defaultById['style.bootloader.input-only'].action.includes('omarchy-plymouth-playback-set input-only'),
+  'menu maps bootloader playback choices to the persisted selector'
+)
+assertEqual(
+  defaultById['style.bootloader.full-animated'].checked,
+  '[[ "$(omarchy-plymouth-playback-set current)" == "full-animated" ]]',
+  'menu checks Full Animated when it is active'
+)
+assertEqual(
+  defaultById['style.bootloader.input-only'].checked,
+  '[[ "$(omarchy-plymouth-playback-set current)" == "input-only" ]]',
+  'menu checks Input Only when it is active'
+)
+assert(
+  defaultById['style.bootloader.full-animated'].action.startsWith('[[ "$(omarchy-plymouth-playback-set current)" == "full-animated" ]] ||')
+    && defaultById['style.bootloader.input-only'].action.startsWith('[[ "$(omarchy-plymouth-playback-set current)" == "input-only" ]] ||'),
+  'menu does not reopen the privileged playback dialog for the active mode'
+)
+assert(
+  defaultById['style.bootloader.effect'].action.includes('omarchy-plymouth-effect-switcher'),
+  'menu keeps the full TTFX effect list under Style > Bootloader > Effect'
+)
+assert(
+  defaultById['style.bootloader.effect'].action.includes('"$effect" == "$(omarchy-plymouth-effect-set current)"'),
+  'menu does not reopen the privileged effect dialog for the active effect'
+)
+assertDeepEqual(
   defaultItems.filter(item => item.parent === 'setup.plugin').map(item => item.label),
   ['Enable Plugin', 'Disable Plugin', 'Add Plugin', 'Clone Plugin', 'Remove Plugin'],
   'menu manages plugins from Setup > Plugins'

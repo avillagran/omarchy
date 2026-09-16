@@ -103,7 +103,10 @@
   // Style
   "style.theme": {"icon":"󰸌","label":"Theme","aliases":["theme","themes"],"action":"theme=$(omarchy-theme-switcher); [[ -n $theme ]] && omarchy-theme-set \"$theme\""},
   "style.background": {"icon":"","label":"Background","aliases":["background","wallpaper"],"action":"background=$(omarchy-theme-bg-switcher); [[ -n $background ]] && omarchy-theme-bg-set \"$background\""},
-  "style.unlock": {"icon":"󰟵","label":"Unlock","aliases":["unlock"],"action":"unlock=$(omarchy-plymouth-switcher); if [[ $unlock == default ]]; then omarchy-launch-floating-terminal-with-presentation omarchy-plymouth-reset; elif [[ -n $unlock ]]; then omarchy-launch-floating-terminal-with-presentation \"omarchy-plymouth-set-by-theme $(printf %q \"$unlock\")\"; fi"},
+  "style.bootloader": {"icon":"󰑣","label":"Bootloader"},
+  "style.bootloader.full-animated": {"icon":"󰑐","label":"Full Animated","checked":"[[ \"$(omarchy-plymouth-playback-set current)\" == \"full-animated\" ]]","action":"[[ \"$(omarchy-plymouth-playback-set current)\" == \"full-animated\" ]] || omarchy-launch-floating-terminal-with-presentation 'omarchy-plymouth-playback-set full-animated'"},
+  "style.bootloader.input-only": {"icon":"󰌌","label":"Input Only","checked":"[[ \"$(omarchy-plymouth-playback-set current)\" == \"input-only\" ]]","action":"[[ \"$(omarchy-plymouth-playback-set current)\" == \"input-only\" ]] || omarchy-launch-floating-terminal-with-presentation 'omarchy-plymouth-playback-set input-only'"},
+  "style.bootloader.effect": {"icon":"󰑣","label":"Effect","action":"effect=$(omarchy-plymouth-effect-switcher); [[ -z $effect || \"$effect\" == \"$(omarchy-plymouth-effect-set current)\" ]] || omarchy-launch-floating-terminal-with-presentation \"omarchy-plymouth-effect-set $(printf %q \"$effect\")\""},
   "style.font": {"icon":"","label":"Font","provider":"fonts"},
   "style.bar": {"icon":"󰍜","label":"Menu Bar"},
   "style.bar.position": {"icon":"","label":"Position"},

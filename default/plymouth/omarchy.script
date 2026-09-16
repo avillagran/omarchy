@@ -22,8 +22,10 @@ global.fake_progress_start_time = 0.0;  # Track when fake progress started
 global.password_shown = 0;  # Track if password dialog has been shown
 global.max_progress = 0.0;  # Track the maximum progress reached to prevent backwards movement
 
+
 fun refresh_callback() {
   global.animation_frame++;
+
 
   # Animate fake progress to limit over time with easing
   if (global.fake_progress_active == 1) {
@@ -86,6 +88,7 @@ fun hide_password_dialog() {
     bullet.sprites[index].SetOpacity(0);
   }
 }
+
 
 fun start_fake_progress() {
   global.fake_progress_active = 1;
