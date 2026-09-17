@@ -38,6 +38,8 @@ TestCase {
  property string appId: ""
  property string pendingAppId: ""
  property bool frameReady: false
+ property bool captureFailed: false
+ property var source: ({})
 
  property string demoTitle: ""
  property bool titlePending: false
@@ -45,8 +47,10 @@ TestCase {
  property int titlePendingGeneration: 0
  Timer { id: titleHint; interval: 5000 }
  Timer { id: hint; interval: 2000 }
+ Timer { id: captureDeadline; interval: 1500; onTriggered: captureStopped() }
  function present(owner,monitor,id,title) { PRESENT }
  function commit(owner) { COMMIT }
+ function captureStopped() { CAPTURE_STOPPED }
  function test_title_independent_expiry() {
    compare(present("owner","eDP-1","org.omarchy.amiga-screensaver.0123456789abcdef0123456789abcdef", "<b>Actual & title</b>"), "ok")
    compare(commit("owner"), "ok")
@@ -73,7 +77,7 @@ TestCase {
  function seat(isIdle) {}
  function press(event) { PRESS }
  function release(event) { RELEASE }
- function init() { hint.stop(); titleHint.stop(); dismissed = false; reason = ""; armed = true; requestedMuted = true; audioRevision = 0; presentationGeneration = 0; titlePendingGeneration = 0; titlePending = false; appId = ""; pendingAppId = "" }
+ function init() { hint.stop(); titleHint.stop(); dismissed = false; reason = ""; armed = true; requestedMuted = true; audioRevision = 0; presentationGeneration = 0; titlePendingGeneration = 0; titlePending = false; appId = ""; pendingAppId = ""; captureFailed = false }
  function m(repeat) { return {key: Qt.Key_M, isAutoRepeat: repeat, accepted: false} }
  function test_seat_before_m() {
    seat(false); press(m(false)); verify(!dismissed, "M dismissed via " + reason)
@@ -110,7 +114,7 @@ TestCase {
  }
 }
 '''
-for placeholder, marker in [('DISMISS', 'function dismiss('), ('PRESENT', 'function present('), ('COMMIT', 'function commit('), ('APPLIED', 'function audioApplied('), ('TOGGLE', 'function requestAudioToggle('), ('MOTION', 'onMotion:'), ('PRESS', 'Keys.onPressed:'), ('RELEASE', 'Keys.onReleased:')]:
+for placeholder, marker in [('DISMISS', 'function dismiss('), ('PRESENT', 'function present('), ('COMMIT', 'function commit('), ('CAPTURE_STOPPED', 'function captureStopped('), ('APPLIED', 'function audioApplied('), ('TOGGLE', 'function requestAudioToggle('), ('MOTION', 'onMotion:'), ('PRESS', 'Keys.onPressed:'), ('RELEASE', 'Keys.onReleased:')]:
     qml = qml.replace(placeholder, body_after(marker))
 qml = qml.replace('Timer { id: titleHint; interval: 5000 }', re.search(r'Timer \{ id: titleHint; interval: [0-9]+ \}', source).group(0))
 qml = qml.replace('ARRIVED', body_after('function frameArrived(') if 'function frameArrived(' in source else '')
