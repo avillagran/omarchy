@@ -23,13 +23,16 @@ for (const input of ['Keys.onPressed', 'onPressed', 'onWheel', 'onMotion'])
 assert(!guard.includes('onPositionChanged'), 'absolute compositor warps do not dismiss')
 assert(guard.includes('Qt.BlankCursor') && guard.includes('WlrKeyboardFocus.Exclusive'), 'surface-local cursor and exclusive keys')
 assert(guard.includes('interval: 60000'), 'owned guard has a bounded transition-safe lease')
-assert(!guard.includes('ScreencopyView'), 'guard never depends on compositor screencopy')
-assert(guard.includes('covered'), 'guard covers transitions and reveals the fullscreen emulator')
-assert(guard.includes('!root.covered ? "transparent" : "black"'), 'target output goes transparent only while presenting')
+assert(guard.includes('color: "transparent"') && guard.includes('id: captureBackdrop') && guard.includes('ScreencopyView'), 'alpha-capable guard paints an opaque fallback and owned emulator capture')
+assert(!guard.includes('color: "black"\n      exclusionMode'), 'layer surface itself stays non-opaque so the captured client keeps receiving frame callbacks')
+assert(guard.includes('captureSource: panel.screen.name === root.monitorName ? root.source : null'), 'capture is restricted to the selected output and owned toplevel')
+assert(!guard.includes('!root.covered ? "transparent" : "black"'), 'presentation never relies on a transparent layer above the emulator')
+assert(guard.includes('visible: root.active\n') && !guard.includes('visible: root.active && root.panelsVisible'), 'black transition shield remains mapped while priming the restored source')
 const vm = require('vm')
 const state = {
   token: '', monitorName: '', appId: '', reason: '', dismissed: false, hintOn: 'on', hintOff: 'off',
-  requestedMuted: true, audioMuted: true, audioRevision: 0, frameReady: false, covered: true,
+  requestedMuted: true, audioMuted: true, audioRevision: 0, frameReady: false,
+  presentationGeneration: 0, titlePendingGeneration: 0, titlePending: false, pendingAppId: '',
   get active() { return this.token !== '' },
   motion: { ready: true }, lease: { restart() {}, stop() {} },
   titleHint: { restart() {}, stop() {}, running: true }, demoTitle: "",
@@ -45,7 +48,13 @@ assertEqual(state.begin('invalid', 'TEST'), 'busy', 'invalid owner rejected')
 assertEqual(state.begin(owner, 'TEST'), 'ok', 'owned guard opens')
 assertEqual(state.begin('b'.repeat(32), 'TEST'), 'busy', 'second owner rejected')
 assertEqual(state.present(owner, 'TEST', 'org.omarchy.amiga-screensaver.' + owner), 'ok', 'token matched presentation')
-assert(!state.covered && state.frameReady, 'presentation reveals the fullscreen emulator window')
+assert(!state.frameReady, 'staging keeps the black transition shield until capture is ready')
+assert(state.appId === '' && state.pendingAppId.endsWith(owner), 'staging cannot replace the black shield before capture commit')
+assertEqual(state.commit(owner), 'ok', 'owner binds the opaque capture over the black shield')
+assert(state.pendingAppId === '' && state.appId.endsWith(owner), 'commit binds capture to the exact staged source')
+assert(!state.frameReady && state.titlePending, 'presentation waits for owned ScreencopyView content')
+state.frameArrived(state.presentationGeneration)
+assert(state.frameReady && !state.titlePending, 'owned capture content marks the presentation ready')
 state.requestNavigation('next')
 assertEqual(JSON.parse(state.poll(owner)).navigationRevision, 1, 'Right requests one navigation revision')
 assertEqual(JSON.parse(state.poll(owner)).navigationDirection, 'next', 'Right requests forward history')
@@ -70,7 +79,7 @@ const launcher = fs.readFileSync(path.join(root, 'bin/omarchy-launch-screensaver
 assert(launcher.includes('omarchy-amiga-screensaver.lock') && launcher.includes('flock -n'), 'Default preview refuses overlap with an active Amiga controller')
 assert(service.includes('AmigaScreensaver {'), 'input guard lives inside the native shell, not a background plugin')
 assert(service.includes('runProcess(lockProcess, "lock", "omarchy-system-lock")'), 'idle lock delegates to the real Omarchy authentication command')
-for (const method of ['amigaBegin', 'amigaPoll', 'amigaPresent', 'amigaEnd'])
+for (const method of ['amigaBegin', 'amigaPoll', 'amigaPresent', 'amigaCommit', 'amigaEnd'])
   assert(service.includes(`function ${method}(`), `idle IPC provides ${method}`)
 // Exercise the actual QML lock guard functions without a compositor or live IPC.
 assert(!service.includes('firstPartyServiceFor("omarchy.lock")'), 'idle does not expose or look up authentication services')

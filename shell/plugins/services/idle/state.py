@@ -212,13 +212,17 @@ def play(process, demo, owner, monitor, appid, log, history, handled, timeout=No
       # token-bound Wayland toplevel is the exact crash signal for recovery.
       return handled, 'crash'
     if restored and window and not shown:
-      # Presentation is the emulator's own compositor-fullscreen window
-      # below the transparent guard overlay. Never gate on screencopy or on
-      # a fixed window geometry: dma-buf negotiation differs per GPU/driver
-      # and fullscreen works from any mapped state.
+      # Prime the exact restored Wayland client under an always-mapped black
+      # transition shield. The layer surface remains alpha-capable so Hyprland
+      # keeps scheduling the covered client; only after this bounded prime do
+      # we bind ScreencopyView to the token-matched toplevel.
       amiga.fullscreen_window(window['address'])
       if amiga.ipc('amigaPresent', owner, monitor, appid, demo['title']) != 'ok':
-        raise InterruptedError('Guard refused presentation')
+        raise InterruptedError('Guard refused presentation staging')
+      amiga.fullscreen_window(window['address'])
+      time.sleep(.15)
+      if amiga.ipc('amigaCommit', owner) != 'ok':
+        raise InterruptedError('Guard refused presentation commit')
       shown = True
       print('Amiga presented: ' + demo.get('task_id', '?') + ' ' + demo.get('title', ''), flush=True)
     if shown and revision != status.get('audioRevision') and audio.find() is not None:

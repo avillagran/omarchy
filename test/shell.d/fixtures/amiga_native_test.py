@@ -121,6 +121,17 @@ class NativeTest(unittest.TestCase):
       with self.subTest(playback=playback), self.assertRaisesRegex(ValueError, 'playback'):
         pack.playback_duration({'task_id': 'fixture', 'playback': playback})
 
+  def test_fullscreen_focuses_owned_window_before_covering_it(self):
+    from unittest.mock import patch
+    calls = []
+    with patch.object(amiga.subprocess, 'run', side_effect=lambda command, **kwargs: calls.append(command)), \
+         patch.object(amiga, '_fullscreen_confirmed', return_value=True):
+      amiga.fullscreen_window('0xabc')
+    self.assertEqual(calls[0][:2], ['hyprctl', 'dispatch'])
+    self.assertIn('hl.dsp.focus', calls[0][2])
+    self.assertIn('address:0xabc', calls[0][2])
+    self.assertIn('hl.dsp.window.fullscreen', calls[1][2])
+
   def test_geometry_requires_observed_float_dimensions(self):
     self.assertFalse(amiga.source_geometry_ready(dict(floating=False, size=[640, 480])))
     self.assertFalse(amiga.source_geometry_ready(dict(floating=True, size=[853, 533])))
@@ -208,7 +219,7 @@ class NativeTest(unittest.TestCase):
           return 'ok'
         stack.enter_context(patch.object(amiga, 'ipc', side_effect=ipc))
         stack.enter_context(patch.object(state, 'owned_window', return_value={'floating': True, 'size': [640, 480], 'address': '0xabc'}))
-        stack.enter_context(patch.object(amiga, 'fullscreen_window'))
+        fullscreen = stack.enter_context(patch.object(amiga, 'fullscreen_window'))
         stack.enter_context(patch.object(state.subprocess, 'run'))
         audio = stack.enter_context(patch.object(state, 'OwnedAudio'))
         audio.return_value.find.return_value = None
@@ -217,6 +228,8 @@ class NativeTest(unittest.TestCase):
           state.play(Mock(poll=lambda: None), {'title': 'Fixture'}, token, 'TEST',
                      amiga.APP_CLASS + '.' + token, type('Log', (), {'name': str(log)})(), Mock(), 0)
         self.assertEqual('amigaPresent' in calls, expected)
+        self.assertEqual('amigaCommit' in calls, expected)
+        self.assertEqual(fullscreen.call_count, 2 if expected else 0)
 
   def test_restore_errors_override_completion_markers(self):
     import state
