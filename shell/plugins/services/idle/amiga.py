@@ -115,6 +115,12 @@ def fullscreen_window(address):
   if not re.fullmatch(r'0x[0-9a-fA-F]+', address):
     raise ValueError('Invalid owned window address')
   target = 'address:' + address
+  # The capture guard is an exclusive overlay. Focus the exact owned client
+  # before fullscreening it so the compositor schedules its initial buffers;
+  # otherwise a covered Wayland client can remain on its black startup buffer.
+  subprocess.run(['hyprctl', 'dispatch',
+                  'hl.dsp.focus({ window = "' + target + '" })'],
+                 capture_output=True, timeout=3)
   for _ in range(3):
     subprocess.run(['hyprctl', 'dispatch',
                     'hl.dsp.window.fullscreen({ window = "' + target + '", action = "set", mode = "fullscreen" })'],

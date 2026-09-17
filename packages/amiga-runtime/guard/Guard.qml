@@ -9,11 +9,12 @@ Item {
   property string token: ""
   property string monitorName: ""
   property string appId: ""
+  property string pendingAppId: ""
   property string reason: ""
   property bool dismissed: false
   property bool armed: false
   property bool frameReady: false
-  property bool covered: true
+
   property bool requestedMuted: true
   property bool audioMuted: true
   property int audioRevision: 0
@@ -32,17 +33,30 @@ Item {
   }
   Timer { id: hint; interval: 2000 }
   property string demoTitle: ""
+  property bool titlePending: false
+  property int presentationGeneration: 0
+  property int titlePendingGeneration: 0
+  function frameArrived(generation) {
+    if (titlePending && generation === titlePendingGeneration && active && !dismissed) {
+      frameReady = true; titlePending = false; titleHint.restart(); hint.restart()
+    }
+  }
   Timer { id: titleHint; interval: 5000 }
 
   signal opened(string owner)
   signal closed(string owner)
   readonly property bool active: token !== ""
+  readonly property var source: {
+    const windows = ToplevelManager.toplevels.values
+    for (const w of windows) if (w.appId === root.appId) return w
+    return null
+  }
   function begin(owner, monitor) {
     if (active || !/^[a-f0-9]{32}$/.test(owner)) return "busy"
     if (!motion.ready) return "input-unavailable"
     requestedMuted = true; audioMuted = true; audioRevision = 0; navigationRevision = 0; navigationDirection = ""
-    titleHint.stop(); demoTitle = ""
-    monitorName = monitor; appId = ""; dismissed = false; reason = ""; armed = true; covered = true; frameReady = false
+    presentationGeneration = 0; titlePendingGeneration = 0; titlePending = false; titleHint.stop(); demoTitle = ""
+    monitorName = monitor; appId = ""; pendingAppId = ""; dismissed = false; reason = ""; armed = true
     token = owner; lease.restart(); hint.restart(); opened(owner); return "ok"
   }
   function poll(owner) {
@@ -53,18 +67,27 @@ Item {
   function present(owner, monitor, id, title) {
     if (owner !== token || !active || dismissed) return "closed"
     if (!/^org\.omarchy\.amiga-screensaver\.[a-f0-9]{32}$/.test(id)) return "invalid"
-    monitorName = monitor; appId = id; demoTitle = title || ""
-    covered = false; frameReady = true; titleHint.restart(); hint.restart(); return "ok"
+    titleHint.stop(); appId = ""; pendingAppId = id; monitorName = monitor; frameReady = false
+    demoTitle = title || ""; titlePending = false; return "ok"
+  }
+  function commit(owner) {
+    if (owner !== token || !active || dismissed || pendingAppId === "") return "closed"
+    presentationGeneration++; titlePendingGeneration = presentationGeneration
+    titlePending = true; appId = pendingAppId; pendingAppId = ""; return "ok"
   }
   function cover(owner) {
     if (owner !== token || !active || dismissed) return "closed"
-    appId = ""; covered = true; frameReady = false; reason = ""; titleHint.stop(); return "ok"
+    appId = ""; pendingAppId = ""; frameReady = false; reason = ""; titlePending = false; titleHint.stop(); return "ok"
   }
   function dismiss(why) { if (!dismissed) { dismissed = true; reason = why } }
   function end(owner) {
     if (owner !== token || !active) return "closed"
     token = ""; appId = ""; lease.stop(); closed(owner); return "ok"
   }
+  // Renderer probing and a fresh saved-state child can legitimately take more
+  // than ten seconds between polls during a shielded transition. The controller
+  // renews this lease whenever it is responsive; an actual lost controller still
+  // releases the guard after this bounded minute.
   Timer { id: lease; interval: 60000; onTriggered: { root.reason = "lease-expired"; root.end(root.token) } }
   // Classified protocol deltas share Qt's actual wl_pointer/connection.
   // ext-idle-notify cannot exempt M; never infer key identity from timing.
@@ -83,17 +106,39 @@ Item {
       screen: modelData
       visible: root.active
       anchors { top: true; bottom: true; left: true; right: true }
-      // The emulator presents itself via compositor fullscreen directly below
-      // this overlay. The guard never depends on compositor screencopy:
-      // dma-buf negotiation differs per GPU/driver and must not gate
-      // presentation. Covered (transitions) = opaque black everywhere; shown
-      // = transparent only on the target monitor so the emulator shows
-      // through, black on all other outputs.
-      color: panel.screen.name === root.monitorName && !root.covered ? "transparent" : "black"
+      // Keep the layer surface alpha-capable so Hyprland does not occlude the
+      // captured client and stop its frame callbacks. The scene remains
+      // visually opaque through this fallback plus the owned capture.
+      color: "transparent"
       exclusionMode: ExclusionMode.Ignore
       WlrLayershell.namespace: "omarchy-amiga-screensaver"
       WlrLayershell.layer: WlrLayer.Overlay
       WlrLayershell.keyboardFocus: WlrKeyboardFocus.Exclusive
+      Rectangle {
+        id: captureBackdrop
+        anchors.fill: parent
+        color: "black"
+      }
+      // Export ONLY the owned toplevel, never the output (which recurses and
+      // includes pinned panels). Opaque overlay keeps desktop UI underneath.
+      ScreencopyView {
+        anchors.fill: parent
+        captureSource: panel.screen.name === root.monitorName ? root.source : null
+        live: root.active && !root.dismissed
+        paintCursor: false
+        onCaptureSourceChanged: {
+          const generation = root.presentationGeneration
+          Qt.callLater(function() {
+            if (panel.screen.name === root.monitorName && captureSource && hasContent)
+              root.frameArrived(generation)
+          })
+        }
+        onHasContentChanged: if (panel.screen.name === root.monitorName) {
+          if (!hasContent) root.frameReady = false
+          else root.frameArrived(root.presentationGeneration)
+        }
+        onStopped: if (root.active && root.source) root.reason = "capture-stopped"
+      }
       Item {
         anchors.fill: parent; focus: true
         Keys.onPressed: event => {

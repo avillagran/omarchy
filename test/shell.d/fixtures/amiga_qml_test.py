@@ -36,7 +36,9 @@ TestCase {
  property string token: "owner"
  property string monitorName: ""
  property string appId: ""
+ property string pendingAppId: ""
  property bool frameReady: false
+
  property string demoTitle: ""
  property bool titlePending: false
  property int presentationGeneration: 0
@@ -44,8 +46,10 @@ TestCase {
  Timer { id: titleHint; interval: 5000 }
  Timer { id: hint; interval: 2000 }
  function present(owner,monitor,id,title) { PRESENT }
+ function commit(owner) { COMMIT }
  function test_title_independent_expiry() {
    compare(present("owner","eDP-1","org.omarchy.amiga-screensaver.0123456789abcdef0123456789abcdef", "<b>Actual & title</b>"), "ok")
+   compare(commit("owner"), "ok")
    compare(presentationGeneration, 1)
    compare(demoTitle, "<b>Actual & title</b>"); verify(!titleHint.running)
    frameArrived(presentationGeneration); verify(titleHint.running)
@@ -54,6 +58,7 @@ TestCase {
    wait(1000); verify(!hint.running)
    const firstGeneration = presentationGeneration
    present("owner","eDP-1","org.omarchy.amiga-screensaver.1123456789abcdef0123456789abcdef", "Next")
+   commit("owner")
    compare(presentationGeneration, firstGeneration + 1)
    compare(demoTitle,"Next"); verify(!titleHint.running)
    frameArrived(firstGeneration); verify(!titleHint.running, "stale source content rearmed title")
@@ -68,7 +73,7 @@ TestCase {
  function seat(isIdle) {}
  function press(event) { PRESS }
  function release(event) { RELEASE }
- function init() { hint.stop(); titleHint.stop(); dismissed = false; reason = ""; armed = true; requestedMuted = true; audioRevision = 0; presentationGeneration = 0; titlePendingGeneration = 0; titlePending = false }
+ function init() { hint.stop(); titleHint.stop(); dismissed = false; reason = ""; armed = true; requestedMuted = true; audioRevision = 0; presentationGeneration = 0; titlePendingGeneration = 0; titlePending = false; appId = ""; pendingAppId = "" }
  function m(repeat) { return {key: Qt.Key_M, isAutoRepeat: repeat, accepted: false} }
  function test_seat_before_m() {
    seat(false); press(m(false)); verify(!dismissed, "M dismissed via " + reason)
@@ -105,7 +110,7 @@ TestCase {
  }
 }
 '''
-for placeholder, marker in [('DISMISS', 'function dismiss('), ('PRESENT', 'function present('), ('APPLIED', 'function audioApplied('), ('TOGGLE', 'function requestAudioToggle('), ('MOTION', 'onMotion:'), ('PRESS', 'Keys.onPressed:'), ('RELEASE', 'Keys.onReleased:')]:
+for placeholder, marker in [('DISMISS', 'function dismiss('), ('PRESENT', 'function present('), ('COMMIT', 'function commit('), ('APPLIED', 'function audioApplied('), ('TOGGLE', 'function requestAudioToggle('), ('MOTION', 'onMotion:'), ('PRESS', 'Keys.onPressed:'), ('RELEASE', 'Keys.onReleased:')]:
     qml = qml.replace(placeholder, body_after(marker))
 qml = qml.replace('Timer { id: titleHint; interval: 5000 }', re.search(r'Timer \{ id: titleHint; interval: [0-9]+ \}', source).group(0))
 qml = qml.replace('ARRIVED', body_after('function frameArrived(') if 'function frameArrived(' in source else '')

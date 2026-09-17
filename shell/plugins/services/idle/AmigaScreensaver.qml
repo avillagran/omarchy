@@ -21,6 +21,7 @@ Item {
   }
   function poll(owner) { return guard.item ? guard.item.poll(owner) : "closed" }
   function present(owner, monitor, appId, title) { return guard.item ? guard.item.present(owner, monitor, appId, title) : "closed" }
+  function commit(owner) { return guard.item ? guard.item.commit(owner) : "closed" }
   function audioApplied(owner, revision, muted) { return guard.item ? guard.item.audioApplied(owner, revision, muted) : "closed" }
   function cover(owner) { return guard.item ? guard.item.cover(owner) : "closed" }
   function dismiss() { if (guard.item) guard.item.dismiss("locked") }
