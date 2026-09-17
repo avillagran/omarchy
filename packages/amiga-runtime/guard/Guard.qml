@@ -14,6 +14,7 @@ Item {
   property bool dismissed: false
   property bool armed: false
   property bool frameReady: false
+  property bool captureFailed: false
 
   property bool requestedMuted: true
   property bool audioMuted: true
@@ -38,10 +39,18 @@ Item {
   property int titlePendingGeneration: 0
   function frameArrived(generation) {
     if (titlePending && generation === titlePendingGeneration && active && !dismissed) {
-      frameReady = true; titlePending = false; titleHint.restart(); hint.restart()
+      captureDeadline.stop(); frameReady = true; titlePending = false; titleHint.restart(); hint.restart()
     }
   }
+  function captureStopped() {
+    if (captureFailed || !active || dismissed || appId === "" || source === null) return
+    // Some compositor/GPU combinations reject toplevel screencopy. The owned
+    // client is already frame-validated and fullscreen, so reveal it directly
+    // on the target output while retaining the guard's input and OSD surfaces.
+    captureFailed = true; reason = "capture-fallback"; frameArrived(presentationGeneration)
+  }
   Timer { id: titleHint; interval: 5000 }
+  Timer { id: captureDeadline; interval: 1500; onTriggered: root.captureStopped() }
 
   signal opened(string owner)
   signal closed(string owner)
@@ -55,8 +64,8 @@ Item {
     if (active || !/^[a-f0-9]{32}$/.test(owner)) return "busy"
     if (!motion.ready) return "input-unavailable"
     requestedMuted = true; audioMuted = true; audioRevision = 0; navigationRevision = 0; navigationDirection = ""
-    presentationGeneration = 0; titlePendingGeneration = 0; titlePending = false; titleHint.stop(); demoTitle = ""
-    monitorName = monitor; appId = ""; pendingAppId = ""; dismissed = false; reason = ""; armed = true
+    presentationGeneration = 0; titlePendingGeneration = 0; titlePending = false; titleHint.stop(); captureDeadline.stop(); demoTitle = ""
+    monitorName = monitor; appId = ""; pendingAppId = ""; dismissed = false; reason = ""; armed = true; captureFailed = false
     token = owner; lease.restart(); hint.restart(); opened(owner); return "ok"
   }
   function poll(owner) {
@@ -67,22 +76,22 @@ Item {
   function present(owner, monitor, id, title) {
     if (owner !== token || !active || dismissed) return "closed"
     if (!/^org\.omarchy\.amiga-screensaver\.[a-f0-9]{32}$/.test(id)) return "invalid"
-    titleHint.stop(); appId = ""; pendingAppId = id; monitorName = monitor; frameReady = false
+    titleHint.stop(); captureDeadline.stop(); appId = ""; pendingAppId = id; monitorName = monitor; frameReady = false; captureFailed = false
     demoTitle = title || ""; titlePending = false; return "ok"
   }
   function commit(owner) {
     if (owner !== token || !active || dismissed || pendingAppId === "") return "closed"
     presentationGeneration++; titlePendingGeneration = presentationGeneration
-    titlePending = true; appId = pendingAppId; pendingAppId = ""; return "ok"
+    titlePending = true; appId = pendingAppId; pendingAppId = ""; captureDeadline.restart(); return "ok"
   }
   function cover(owner) {
     if (owner !== token || !active || dismissed) return "closed"
-    appId = ""; pendingAppId = ""; frameReady = false; reason = ""; titlePending = false; titleHint.stop(); return "ok"
+    appId = ""; pendingAppId = ""; frameReady = false; reason = ""; titlePending = false; captureFailed = false; titleHint.stop(); captureDeadline.stop(); return "ok"
   }
   function dismiss(why) { if (!dismissed) { dismissed = true; reason = why } }
   function end(owner) {
     if (owner !== token || !active) return "closed"
-    token = ""; appId = ""; lease.stop(); closed(owner); return "ok"
+    token = ""; appId = ""; lease.stop(); captureDeadline.stop(); closed(owner); return "ok"
   }
   // Renderer probing and a fresh saved-state child can legitimately take more
   // than ten seconds between polls during a shielded transition. The controller
@@ -118,13 +127,14 @@ Item {
         id: captureBackdrop
         anchors.fill: parent
         color: "black"
+        visible: panel.screen.name !== root.monitorName || !root.captureFailed
       }
       // Export ONLY the owned toplevel, never the output (which recurses and
       // includes pinned panels). Opaque overlay keeps desktop UI underneath.
       ScreencopyView {
         anchors.fill: parent
         captureSource: panel.screen.name === root.monitorName ? root.source : null
-        live: root.active && !root.dismissed
+        live: root.active && !root.dismissed && !root.captureFailed
         paintCursor: false
         onCaptureSourceChanged: {
           const generation = root.presentationGeneration
@@ -137,7 +147,7 @@ Item {
           if (!hasContent) root.frameReady = false
           else root.frameArrived(root.presentationGeneration)
         }
-        onStopped: if (root.active && root.source) root.reason = "capture-stopped"
+        onStopped: root.captureStopped()
       }
       Item {
         anchors.fill: parent; focus: true
