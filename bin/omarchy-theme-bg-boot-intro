@@ -63,14 +63,18 @@ resolve_intro() {
   printf '%s\n' "$intro"
 }
 
-# Download a chosen wallpaper's hosted intro, so it plays the next time that
-# wallpaper arrives with its theme or at login. Nothing waits for this.
+# Download a chosen wallpaper's hosted intro for a future selection, theme
+# arrival or login. Download completion never starts playback.
 fetch_intro() {
   local background staged code cached
 
   [[ ! -f $toggle ]] || return 0
   background=$(readlink -f "${1:-}" 2>/dev/null) || return 0
   [[ -f $background ]] || return 0
+  case ${background,,} in
+    *.jpg | *.jpeg | *.png | *.bmp | *.webp) ;;
+    *) return 0 ;;
+  esac
   [[ -z $(resolve_intro "$background" || true) ]] || return 0
   hosted_intro "$background" || return 0
   ! animations_off || return 0
