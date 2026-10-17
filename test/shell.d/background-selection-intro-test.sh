@@ -64,6 +64,16 @@ case $2 in
     ;;
 esac
 SH
+cat >"$stage/bin/mktemp" <<'SH'
+#!/bin/bash
+[[ ${FAIL_SNAPSHOT_DIR:-false} != true ]] || exit 1
+exec /usr/bin/mktemp "$@"
+SH
+cat >"$stage/bin/ln" <<'SH'
+#!/bin/bash
+[[ ${FAIL_BACKGROUND_LINK:-false} != true ]] || exit 1
+exec /usr/bin/ln "$@"
+SH
 chmod +x "$stage/bin/"*
 
 choose() { "$ROOT/bin/omarchy-theme-bg-set" "$stage/media/$1"; }
@@ -128,6 +138,19 @@ assert_still road.webp
 ! grep -q '^owe raw ' "$COMMAND_LOG" || fail "settings are checked again after cover preparation"
 rm "$toggle"
 pass "failed playback, unavailable covers and settings changed during preparation fall back to the still"
+
+reset_selection
+FAIL_SNAPSHOT_DIR=true choose road.webp
+assert_still road.webp
+! grep -q '^owe render\|^owe raw ' "$COMMAND_LOG" || fail "a failed temporary directory cannot produce an invalid snapshot path or start playback"
+reset_selection
+if FAIL_BACKGROUND_LINK=true choose road.webp; then
+  fail "an unwritable canonical link reports failure"
+fi
+assert_still old.webp
+! grep -q '^owe raw ' "$COMMAND_LOG" || fail "playback cannot start against an image that was not persisted"
+grep -q '^shell shell finishThemeIntro ' "$COMMAND_LOG" || fail "a failed canonical link releases its outgoing cover"
+pass "temporary-directory and canonical-link failures cannot start an intro for the wrong image"
 
 reset_selection
 COVER_GATE="$stage/cover-gate" choose road.webp &
