@@ -3,6 +3,7 @@
 import argparse
 import hashlib
 import json
+import re
 from pathlib import Path
 import shutil
 import subprocess
@@ -98,8 +99,18 @@ if '//@ pragma RespectSystemStyle' not in text:
 write(relative, text)
 relative = 'bin/omarchy-launch-shell'
 text = (kit / relative).read_text()
-text = text.replace('  QS_DISABLE_FILE_WATCHER=1 QS_NO_RELOAD_POPUP=1 \\\n', '  QML_IMPORT_PATH="$OMARCHY_PATH/shell/styles${QML_IMPORT_PATH:+:$QML_IMPORT_PATH}" \\\n    QT_QUICK_CONTROLS_STYLE=Omarchy QT_QUICK_CONTROLS_FALLBACK_STYLE=Fusion \\\n    QS_DISABLE_FILE_WATCHER=1 QS_NO_RELOAD_POPUP=1 \\\n', 1)
-assert 'QT_QUICK_CONTROLS_STYLE=Omarchy' in text
+if 'QT_QUICK_CONTROLS_STYLE=Omarchy' not in text:
+    # Keep every original assignment, including OMARCHY_STARTUP_BACKGROUND on
+    # current base launchers. Insert before the whole environment line.
+    pattern = r'(?m)^([ \t]*)([^\n]*\bQS_DISABLE_FILE_WATCHER=1[^\n]*)$'
+    def style_environment(match):
+        indent, assignments = match.groups()
+        return (indent + 'QML_IMPORT_PATH="$OMARCHY_PATH/shell/styles${QML_IMPORT_PATH:+:$QML_IMPORT_PATH}" \\\n'
+                + indent + 'QT_QUICK_CONTROLS_STYLE=Omarchy QT_QUICK_CONTROLS_FALLBACK_STYLE=Fusion \\\n'
+                + indent + assignments)
+    text, count = re.subn(pattern, style_environment, text, count=1)
+    if count != 1:
+        raise SystemExit('Unsupported launcher: missing Quickshell environment line')
 write(relative, text)
 (kit / relative).chmod(0o755)
 relative = 'default/uwsm/default'
@@ -138,7 +149,9 @@ common_types = ['Style', 'Color', 'Border', 'Util', 'ToolTipStyle']
 for name in ui_types:
     shutil.copy2(kit / f'shell/Ui/{name}.qml', module / f'Kit/Ui/{name}.qml')
 for name in common_types:
-    shutil.copy2(kit / f'shell/Commons/{name}.qml', module / f'Kit/Commons/{name}.qml')
+    text = (kit / f'shell/Commons/{name}.qml').read_text()
+    text = re.sub(r'(?m)^import qs\.Commons(?=\s|$)', 'import "."', text)
+    (module / f'Kit/Commons/{name}.qml').write_text(text)
 shutil.copy2(kit / 'shell/Commons/BorderGeometry.js', module / 'Kit/Commons/BorderGeometry.js')
 # Independent applications do not receive the main shell's theme IPC payload.
 # Watch the two theme files in this private provider; keep main-shell IPC intact.
@@ -189,7 +202,7 @@ package() {
 '''
 (recipe / 'PKGBUILD').write_text(text)
 manifest = {
-    'previousOmarchy': str(args.installed.resolve()), 'trialOmarchy': str(kit),
+    'baseOmarchy': str(args.installed.resolve()), 'trialOmarchy': str(kit),
     'originalPackage': str(backup / stock.name),
     'runtimeSha256': hashlib.sha256((trial / 'quickshell').read_bytes()).hexdigest(),
     'files': {name: hashlib.sha256((kit / name).read_bytes()).hexdigest() for name in changed},

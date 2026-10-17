@@ -2,7 +2,7 @@
 set -euo pipefail
 
 source_root=$OMARCHY_PATH
-base_root=$OMARCHY_PATH
+base_root=""
 remove=0
 while (( $# )); do
   case "$1" in
@@ -41,6 +41,11 @@ restore_selection() {
     bash "$source_root/bin/omarchy-dev-link" "$1" --no-reboot
   fi
 }
+selected_root=$(bash -c '. /etc/omarchy.conf; printf "%s" "$OMARCHY_PATH"')
+[[ -d $selected_root/shell ]] || { echo "Invalid selected Omarchy tree: $selected_root" >&2; exit 1; }
+if [[ -z $base_root ]]; then
+  base_root=$selected_root
+fi
 if (( remove )); then
   [[ -f $state_file ]] || { echo "No tooltip trial installed by this command."; exit 0; }
   previous=$(read_state previousOmarchy)
@@ -96,10 +101,10 @@ if [[ -z $stock ]]; then
 fi
 [[ -n $stock ]] || { echo "The original Quickshell 0.3.1 package is required for safe rollback." >&2; exit 1; }
 previous_package=$stock
-previous_root=$base_root
+previous_root=$selected_root
 if [[ $installed_version != 0.3.1-* ]]; then
   # A prior local trial records its exact package for restoration.
-  previous_package=$(python3 - "$base_root" "$installed_version" <<'PY'
+  previous_package=$(python3 - "$selected_root" "$installed_version" <<'PY'
 import json, sys
 from pathlib import Path
 p = Path(sys.argv[1]).parent / 'manifest.json'

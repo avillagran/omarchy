@@ -6,12 +6,25 @@ require_command python3
 require_command bsdtar
 stage=$(mktemp -d)
 trap 'rm -rf -- "$stage"' EXIT
+base_root=${TOOLTIP_TEST_BASE:-$ROOT}
 mkdir -p "$stage/base/shell/plugins" "$stage/base/bin" "$stage/base/default/uwsm"
-cp -a "$ROOT/shell/Ui" "$ROOT/shell/Commons" "$stage/base/shell/"
-cp -a "$ROOT/shell/plugins/bar" "$stage/base/shell/plugins/"
-cp "$ROOT/shell/shell.qml" "$stage/base/shell/"
-cp "$ROOT/bin/omarchy-launch-shell" "$stage/base/bin/"
-cp "$ROOT/default/uwsm/default" "$stage/base/default/uwsm/"
+cp -a "$base_root/shell/Ui" "$base_root/shell/Commons" "$stage/base/shell/"
+cp -a "$base_root/shell/plugins/bar" "$stage/base/shell/plugins/"
+cp "$base_root/shell/shell.qml" "$stage/base/shell/"
+cp "$base_root/bin/omarchy-launch-shell" "$stage/base/bin/"
+cp "$base_root/default/uwsm/default" "$stage/base/default/uwsm/"
+if [[ -z ${TOOLTIP_TEST_BASE:-} ]]; then
+  # Keep a stock launcher snapshot and restore the stock namespace imports.
+  # A feature checkout already has both fixes and would mask regressions.
+  cp "$SHELL_TEST_DIR/fixtures/tooltips/base-launcher.txt" "$stage/base/bin/omarchy-launch-shell"
+  python3 - "$stage/base" <<'PY_BASE'
+from pathlib import Path
+import sys
+for name in ['Style', 'Border']:
+    path = Path(sys.argv[1]) / f'shell/Commons/{name}.qml'
+    path.write_text(path.read_text().replace('import "." as Commons', 'import qs.Commons as Commons'))
+PY_BASE
+fi
 python3 - "$stage/stock.pkg.tar" <<'PY'
 import io, sys, tarfile
 raw = b'pkgname = quickshell\npkgver = 0.3.1-1\narch = any\nlicense = LGPL-3.0-only\nurl = https://quickshell.org\ndepend = qt6-base\n'
@@ -22,6 +35,11 @@ with tarfile.open(sys.argv[1], 'w') as archive:
 PY
 python3 "$ROOT/default/tooltips/prepare-trial.py" --source "$ROOT" --installed "$stage/base" \
   --stock-package "$stage/stock.pkg.tar" --runtime "$(command -v quickshell)" --output "$stage/trial" > "$stage/prepare.json"
+rg -Fq 'OMARCHY_STARTUP_BACKGROUND="$startup_background" QS_DISABLE_FILE_WATCHER=1' "$stage/trial/omarchy/bin/omarchy-launch-shell" || fail "base launcher assignments survive"
+rg -q 'QT_QUICK_CONTROLS_STYLE=Omarchy' "$stage/trial/omarchy/bin/omarchy-launch-shell" || fail "base launcher gains style selection"
+if rg -q '^import qs\.Commons' "$stage/trial/module/Omarchy/Kit/Commons/"*.qml; then
+  fail "private provider has no consumer namespace imports"
+fi
 mkdir -p "$stage/consumer" "$stage/home/.config/omarchy" "$stage/home/.local/state/omarchy/current/theme"
 cp "$SHELL_TEST_DIR/fixtures/tooltips/global.qml" "$stage/consumer/shell.qml"
 printf '%s\n' '[tooltip]' 'background = "#121212"' > "$stage/home/.local/state/omarchy/current/theme/shell.toml"
