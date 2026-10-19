@@ -1770,6 +1770,10 @@ ShellRoot {
       return shell.bootIntro.themeCoverStatus(token)
     }
 
+    function backgroundIntroStatus(): string {
+      return shell.bootIntro.transitionStatus()
+    }
+
     function ping(): string {
       return "ok"
     }

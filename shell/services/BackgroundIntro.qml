@@ -132,6 +132,12 @@ Item {
     return token === transitionToken && (themeToken || themeFade.running || startupFade.running) ? "pending" : "ready"
   }
 
+  // Whichever transition is current, including a background selection whose
+  // token belonged to an earlier command.
+  function transitionStatus() {
+    return themeStatus(transitionToken)
+  }
+
   function themeCoverStatus(token) {
     if (token !== themeToken) return "superseded"
     if (!themeBackground) return "ready"

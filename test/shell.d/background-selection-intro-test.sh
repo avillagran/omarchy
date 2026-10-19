@@ -50,6 +50,14 @@ case $2 in
     # The old background stays canonical until the outgoing cover is painted.
     [[ $(readlink -f "$HOME/.local/state/omarchy/current/background") != "${EXPECTED_BACKGROUND:-}" ]] || exit 2
     ;;
+  backgroundIntroStatus)
+    if [[ -n ${FADE_GATE:-} && ! -f $FADE_GATE ]]; then
+      touch "$FADE_GATE.entered"
+      echo pending
+      exit 0
+    fi
+    echo ready
+    ;;
   themeIntroCoverStatus)
     if [[ -n ${COVER_GATE:-} && ! -f $COVER_GATE ]]; then
       touch "$COVER_GATE.entered"
@@ -97,6 +105,22 @@ grep -q '^shell shell startBackgroundIntro ' "$COMMAND_LOG" || fail "first-frame
 choose road.webp
 [[ ! -s $COMMAND_LOG ]] || fail "confirming the same image leaves playback alone"
 pass "a different confirmed still plays its intro without replacing the persisted image or login marker"
+
+reset_selection
+FADE_GATE="$stage/fade-gate" choose road.webp &
+selection=$!
+for _ in {1..300}; do
+  [[ -f $stage/fade-gate.entered ]] && break
+  sleep 0.01
+done
+[[ -f $stage/fade-gate.entered ]] || fail "selection asks whether an earlier opening fade is still running"
+! grep -q '^owe render ' "$COMMAND_LOG" || fail "the outgoing frame waits for the earlier opening fade"
+touch "$stage/fade-gate"
+wait "$selection"
+assert_still road.webp
+grep -q '^owe render .*"cmd":"snapshot"' "$COMMAND_LOG" || fail "the outgoing frame is captured once the fade finishes"
+rm -f "$stage/fade-gate" "$stage/fade-gate.entered"
+pass "a rapid selection captures the outgoing frame after the earlier opening fade"
 
 for media in plain.webp movie.mp4; do
   reset_selection

@@ -36,6 +36,12 @@ fi
 play_intro() {
   local snapshot_dir snapshot token status deadline
   owe status >/dev/null 2>&1 || return 1
+  # A current video frame only represents the screen after its opening fade.
+  # Finish an earlier selection's reveal before capturing the outgoing cover.
+  deadline=$((SECONDS + 3))
+  while (( SECONDS < deadline )) && [[ $(omarchy-shell shell backgroundIntroStatus 2>/dev/null) == "pending" ]]; do
+    sleep 0.02
+  done
   mkdir -p "$HOME/.cache/omarchy" || return 1
   snapshot_dir=$(mktemp -d "$HOME/.cache/omarchy/background-selection.XXXXXX") || return 1
   snapshot="$snapshot_dir/previous.ppm"

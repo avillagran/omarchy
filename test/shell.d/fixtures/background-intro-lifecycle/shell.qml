@@ -33,6 +33,7 @@ ShellRoot {
       intro.prepareTheme(Quickshell.env("INTRO_TEST_COVER"), "theme-one", Qt.btoa('background = "#123456"'), "")
       test.check(intro.themeCoverStatus("theme-one") === "loading", "the cover waits for decoding and presentation")
       test.check(intro.themeStatus("theme-one") === "pending", "app retints wait for the intro reveal")
+      test.check(intro.transitionStatus() === "pending", "a later selection sees the current transition without its token")
       test.check(!Qt.colorEqual(Commons.Color.background, "#123456"), "the palette waits for OWE's first frame")
       intro.finishTheme("superseded-theme")
       test.check(intro.themeToken === "theme-one", "an older intro cannot release the pending handoff")
@@ -65,6 +66,7 @@ ShellRoot {
       if (handoff.running && intro.themeToken === "") {
         Qt.callLater(function() {
           test.check(intro.themeStatus("theme-one") === "pending", "app retints also wait through the opening crossfade")
+          test.check(intro.transitionStatus() === "pending", "a later selection waits through the opening crossfade")
           test.openingFadeObserved = true
         })
       }
