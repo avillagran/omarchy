@@ -2,8 +2,10 @@ echo "Install Omarchy's Quickshell build so plugins keep the theme palette on Qt
 
 # Qt 6.12 adds a QtQuick Color singleton that shadows the qs.Commons Color.
 # Only Omarchy's Quickshell build honors `//@ pragma OmarchyLoadPatch`, which
-# pins QtQuick imports to 6.11 for the shell and every plugin it loads. A
-# pacman.conf that lists [extra] before [omarchy] keeps Arch's build instead.
+# pins QtQuick imports to 6.11 for the shell and every plugin it loads. ARM
+# keeps [omarchy] at `Usage = Sync`, so an unqualified quickshell, including
+# 1787399318's reinstall, resolves to Arch's build. The update helper now
+# selects omarchy/quickshell, but this update still ran the previous helper.
 version=$(quickshell --version 2>/dev/null || true)
 
 if [[ $version != *"distributed by Omarchy"* ]]; then
