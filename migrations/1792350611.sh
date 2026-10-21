@@ -9,8 +9,9 @@ echo "Install Omarchy's Quickshell build so plugins keep the theme palette on Qt
 version=$(quickshell --version 2>/dev/null || true)
 
 if [[ $version != *"distributed by Omarchy"* ]]; then
-  # Skip instead of failing when [omarchy] cannot serve it: a failed migration
-  # aborts omarchy-migrate's whole run and retries at every login.
+  # Skip instead of failing when [omarchy] cannot serve it, as on a 3.x to
+  # Quattro upgrade that has not configured it yet: the next omarchy update
+  # adds [omarchy] and selects omarchy/quickshell itself.
   if ! pacman -Si omarchy/quickshell &>/dev/null; then
     echo "omarchy/quickshell is not in any configured repo; keeping the current quickshell" >&2
     exit 0
