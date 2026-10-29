@@ -707,9 +707,10 @@ function looksLikeMath(q) {
 //
 // Alfred-style ordering:
 //   - math fires when the text looks like arithmetic (e.g. "5+5", "log(50)").
-//   - web (search) is ALWAYS offered as a fallback, including for arithmetic
-//     (it sits one arrow-down below the calculator result) and for bare URLs
-//     (omarchy-query-web passes those through, so Enter opens the URL itself).
+//   - web (search) is offered as a fallback for every query, including
+//     arithmetic and bare URLs (omarchy-query-web passes those through, so
+//     Enter opens the URL itself). A web plugin with a keyword fires only when
+//     the query starts with it.
 //   - user plugins (copy/run/snippet) fire only when the query starts with their
 //     keyword to avoid noise.
 // The returned order is ranked explicitly (math first, keyword plugins next,
@@ -726,7 +727,7 @@ function queryPluginsForQuery(plugins, query) {
     if (p.kind === "math") {
       if (looksLikeMath(q)) active.push(p)
     } else if (p.kind === "web") {
-      active.push(p)
+      if (!p.keyword || q.indexOf(p.keyword) === 0) active.push(p)
     } else if (p.kind === "copy" || p.kind === "run" || p.kind === "snippet") {
       var kw = p.keyword || ""
       if (kw && q.indexOf(kw) === 0) active.push(p)
@@ -754,13 +755,17 @@ function queryEncode(s) {
   return encodeURIComponent(String(s || ""))
 }
 
-// Build the display row for a plugin result. `result` is the command output
-// (already rendered, trimmed). Returns a displayModel-compatible object. The
-// QML side owns the action string assembly (wl-copy / command), but the pure
-// shape and label logic live here.
+// Build the display row for a plugin result. `result` is the command output,
+// or "" for the placeholder shown while the command runs. Returns a
+// displayModel-compatible object. The QML side owns the action string, but
+// the pure shape and label logic live here. Web rows go in the "fallback"
+// section, placed below the search matches; every other plugin's row goes in
+// "results", above them.
 function queryPluginRow(plugin, query, result, lang) {
-  var value = String(result || "").trim()
-  var label = value
+  // Multi-line output stays intact for the action; the one-line row shows its
+  // lines joined.
+  var value = String(result || "").trim().replace(/\s*\n\s*/g, " ")
+  var label = value || query
   var detail = ""
   if (plugin.action === "copy") {
     detail = lang === "es" ? "Copiar al portapapeles" : "Copy to clipboard"
@@ -775,10 +780,13 @@ function queryPluginRow(plugin, query, result, lang) {
   var icon = plugin.icon || ""
   if (plugin.kind === "math") {
     if (!icon) icon = "calc"
-    label = query + " = " + value
+    label = query + " = " + (value || "…")
   } else if (plugin.kind === "web") {
     if (!icon) icon = "search"
-    label = (lang === "es" ? "Buscar: " : "Search: ") + query
+    var webLabel = plugin.builtin ? "" : queryPluginLabel(plugin, lang)
+    if (webLabel === plugin.id) webLabel = ""
+    if (/^https?:\/\//.test(query)) label = query
+    else label = (webLabel ? webLabel + ": " : (lang === "es" ? "Buscar: " : "Search: ")) + query
   } else {
     // copy/run/snippet: the result stays the prominent label and the plugin's
     // localized name becomes the detail, so `label`/`i18n` have a visible
@@ -792,7 +800,6 @@ function queryPluginRow(plugin, query, result, lang) {
     kind: "query",
     icon: icon,            // icon key: "calc" | "search" | <plugin.icon>
     iconFont: "",
-    // Render via the bundled-SVG path (isAppRow true → iconImage shows file).
     appIcon: "",
     appId: "",
     label: label,
@@ -803,7 +810,7 @@ function queryPluginRow(plugin, query, result, lang) {
     action: "",
     provider: "",
     score: 0,
-    section: "results"
+    section: plugin.kind === "web" ? "fallback" : "results"
   }
 }
 

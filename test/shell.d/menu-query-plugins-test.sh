@@ -75,6 +75,20 @@ assertEqual(calcRowEs.detail, 'Copiar al portapapeles', 'copy action detail loca
 
 const webRow = menu.queryPluginRow(plugins['omarchy.query.web'], 'weather', 'ignored', 'en')
 assertEqual(webRow.detail, 'Open', 'run action detail is Open')
+assertEqual(webRow.section, 'fallback', 'web row goes below the search matches')
+
+// A placeholder (no output yet) still reads as the pending query.
+assertEqual(menu.queryPluginRow(plugins['omarchy.query.calc'], '2+2', '', 'en').label, '2+2 = …', 'pending math row shows an ellipsis')
+assertEqual(menu.queryPluginRow(plugins['omarchy.query.g'], 'g cats', '', 'en').label, 'g cats', 'pending keyword row shows the query')
+
+// Multi-line output is shown on one line; the action keeps the original text.
+assertEqual(menu.queryPluginRow(plugins['omarchy.query.g'], 'g x', 'hello\nworld\n', 'en').label, 'hello world', 'multi-line output joins into the row label')
+
+// A web plugin with a keyword fires only for queries that start with it.
+const kwWeb = { 'com.example.tr': { id: 'com.example.tr', kind: 'web', label: 'Translate', keyword: 'tr ', action: 'run', command: 'x', enabled: true } }
+assertEqual(menu.queryPluginsForQuery(kwWeb, 'tr hola').length, 1, 'keyword web plugin fires for its keyword')
+assertEqual(menu.queryPluginsForQuery(kwWeb, 'hola').length, 0, 'keyword web plugin stays dormant otherwise')
+assertEqual(menu.queryPluginRow(kwWeb['com.example.tr'], 'tr hola', 'https://x', 'en').label, 'Translate: tr hola', 'a user web row names its plugin')
 
 // Icons: the plugin's own icon wins for every kind; math/web fall back to the
 // bundled calc/search keys only when the plugin defines none.
