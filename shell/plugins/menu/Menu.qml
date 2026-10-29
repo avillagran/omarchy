@@ -30,7 +30,7 @@ Item {
       // luminance so the icon always contrasts the card. This is deliberately
       // NOT a shader tint: QtQuick.Effects is unreliable (blackholed) on some
       // Quickshell builds.
-      var c = Color.menu.background
+      var c = root.background
       var lum = 0.299 * c.r + 0.587 * c.g + 0.114 * c.b
       var suffix = lum > 0.5 ? "-dark" : ""
       return root.iconRoot + "/" + icon + suffix + ".svg"
