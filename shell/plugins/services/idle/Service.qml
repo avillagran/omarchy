@@ -34,6 +34,11 @@ Item {
   property double lockCheckedAt: 0
   property double lockProbeStartedAt: 0
   readonly property int lockStatusMaxAge: 1000
+  // Lock polling runs only while an Amiga session is starting or on screen,
+  // so the idle shell spawns nothing when Amiga is unused.
+  property bool amigaWatching: false
+  property double amigaTouchedAt: 0
+  readonly property int amigaWatchGrace: 5000
 
   function invalidateLockStatus() {
     root.lockActive = true
@@ -68,6 +73,20 @@ Item {
     }
     root.lockCheckedAt = root.lockProbeStartedAt
     root.lockActive = false
+  }
+
+  function watchAmiga() {
+    root.amigaTouchedAt = Date.now()
+    if (root.amigaWatching) return
+    root.amigaWatching = true
+    root.refreshLockStatus()
+  }
+
+  function settleAmigaWatch() {
+    var quiet = Date.now() - root.amigaTouchedAt
+    if (amigaScreensaver.open || (quiet >= 0 && quiet < root.amigaWatchGrace)) return
+    root.amigaWatching = false
+    root.invalidateLockStatus()
   }
 
   property bool stayAwake: false
@@ -306,14 +325,17 @@ Item {
 
   Timer {
     interval: 250
-    running: true
+    running: root.amigaWatching
     repeat: true
-    onTriggered: root.refreshLockStatus()
+    onTriggered: {
+      root.settleAmigaWatch()
+      if (root.amigaWatching) root.refreshLockStatus()
+    }
   }
 
   Timer {
     interval: 100
-    running: true
+    running: root.amigaWatching
     repeat: true
     onTriggered: root.lockStatusAllowsAmiga()
   }
@@ -400,7 +422,6 @@ Item {
   Component.onCompleted: {
     logEvent("service-ready")
     refreshStayAwakeState()
-    refreshLockStatus()
   }
 
   // The controller runs inside screensaverProcess for the whole Amiga session,
@@ -422,6 +443,7 @@ Item {
     }
 
     function amigaBegin(owner: string, monitor: string, hintOn: string, hintOff: string): string {
+      root.watchAmiga()
       if (!root.lockStatusAllowsAmiga()) {
         root.refreshLockStatus()
         return "locked"
@@ -430,26 +452,31 @@ Item {
     }
 
     function amigaPoll(owner: string): string {
+      root.watchAmiga()
       if (!root.lockStatusAllowsAmiga()) return "closed"
       return amigaScreensaver.poll(owner)
     }
 
     function amigaPresent(owner: string, monitor: string, appId: string, title: string): string {
+      root.watchAmiga()
       if (!root.lockStatusAllowsAmiga()) return "closed"
       return amigaScreensaver.present(owner, monitor, appId, title)
     }
 
     function amigaCommit(owner: string): string {
+      root.watchAmiga()
       if (!root.lockStatusAllowsAmiga()) return "closed"
       return amigaScreensaver.commit(owner)
     }
 
     function amigaAudioApplied(owner: string, revision: int, muted: bool): string {
+      root.watchAmiga()
       if (!root.lockStatusAllowsAmiga()) return "closed"
       return amigaScreensaver.audioApplied(owner, revision, muted)
     }
 
     function amigaCover(owner: string): string {
+      root.watchAmiga()
       if (!root.lockStatusAllowsAmiga()) return "closed"
       return amigaScreensaver.cover(owner)
     }

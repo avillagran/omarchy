@@ -101,8 +101,10 @@ let dismissals = 0
 const lockState = {
   Date: { now: () => clock },
   lockActive: true, lockCheckedAt: 0, lockProbeStartedAt: 0, lockStatusMaxAge: 1000,
+  amigaWatching: false, amigaTouchedAt: 0, amigaWatchGrace: 5000,
   lockStatusProbe: { running: false },
   amigaScreensaver: {
+    open: false,
     dismiss() { dismissals++ }, begin() { return 'ok' }, poll() { return 'active' }, present() { return 'ok' }
   }
 }
@@ -111,7 +113,10 @@ vm.createContext(lockState)
 for (const match of service.matchAll(/^  function [\s\S]*?^  }/gm)) vm.runInContext(match[0], lockState)
 for (const match of service.matchAll(/^    function amiga(?:Begin|Poll|Present)\([\s\S]*?^    }/gm))
   vm.runInContext(match[0].replace(/: string/g, ''), lockState)
+assert(!lockState.amigaWatching && !lockState.lockStatusProbe.running, 'an unused Amiga spawns no lock probes')
+assert(!/refreshLockStatus\(\)\n  }\n/.test(service.slice(service.indexOf('Component.onCompleted'))), 'shell startup does not probe the lock for Amiga')
 assertEqual(lockState.amigaBegin(owner, 'TEST'), 'locked', 'unknown startup lock state fails closed')
+assert(lockState.amigaWatching, 'an Amiga request starts lock polling')
 assert(lockState.lockStatusProbe.running, 'denied begin requests a fresh lock probe')
 lockState.acceptLockStatus('false\n', 0, 0)
 assertEqual(lockState.amigaBegin(owner, 'TEST'), 'ok', 'recent exact unlocked success permits begin')
@@ -142,6 +147,21 @@ lockState.acceptLockStatus('false', 0, 0)
 const beforeLock = dismissals
 lockState.acceptLockStatus('true', 0, 0)
 assert(dismissals > beforeLock && lockState.lockActive, 'observed lock immediately dismisses guard')
+lockState.lockProbeStartedAt = clock
+lockState.acceptLockStatus('false', 0, 0)
+lockState.amigaScreensaver.open = true
+clock += 10000
+lockState.settleAmigaWatch()
+assert(lockState.amigaWatching, 'an open guard keeps lock polling armed')
+lockState.amigaScreensaver.open = false
+lockState.watchAmiga()
+clock += 4000
+lockState.settleAmigaWatch()
+assert(lockState.amigaWatching, 'a starting Amiga session keeps lock polling armed')
+clock += 1000
+lockState.settleAmigaWatch()
+assert(!lockState.amigaWatching && lockState.lockActive, 'polling stops and authorization fails closed once Amiga goes quiet')
+assert(service.includes('running: root.amigaWatching'), 'lock timers run only while Amiga is watched')
 assert(!service.slice(service.indexOf('function invalidateLockStatus'), service.indexOf('function acceptLockStatus')).includes('stayAwake ='), 'lock observation does not modify Stay Awake')
 JS
 

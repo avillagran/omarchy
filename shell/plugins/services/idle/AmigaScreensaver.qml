@@ -5,6 +5,7 @@ Item {
   id: root
   signal opened(string owner)
   signal closed(string owner)
+  readonly property bool open: !!(guard.item && guard.item.active)
   property string runtimeSource: "file:///usr/lib/omarchy-amiga-runtime/guard/Guard.qml"
   function configure(source) {
     if (guard.item && guard.item.active) return "busy"
