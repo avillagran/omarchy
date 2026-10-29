@@ -234,9 +234,9 @@ def play(process, demo, owner, monitor, appid, log, history, handled, timeout=No
         print('Amiga presented: ' + demo.get('task_id', '?') + ' ' + demo.get('title', ''), flush=True)
     if shown and not direct and status.get('captureFailed'):
       # The compositor rejected toplevel capture. Present the client itself,
-      # fullscreen under the guard, and let the guard reveal it only after the
-      # compositor confirms that state.
-      amiga.fullscreen_window(window['address'])
+      # fullscreen on the selected output under the guard, and let the guard
+      # reveal it only after the compositor confirms that state.
+      amiga.present_direct(window['address'], monitor)
       if amiga.ipc('amigaDirect', owner) != 'ok':
         raise InterruptedError('Guard refused direct presentation')
       direct = True

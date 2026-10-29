@@ -163,3 +163,48 @@ def fullscreen_window(address):
     subprocess.run(['hyprctl', 'dispatch', 'fullscreen', '1'], capture_output=True, timeout=3)
   if not _fullscreen_confirmed(address):
     raise ValueError('Compositor refused fullscreen for the owned emulator window')
+
+
+def _client(address):
+  for client in hypr('clients'):
+    if client.get('address') == address:
+      return client
+  return None
+
+
+def move_to_monitor(address, monitor):
+  """Move the owned client onto the selected output's active workspace.
+
+  A placement rule may open FS-UAE on another output, while the guard only
+  reveals the selected one. Confirm the client's output before returning.
+  """
+  if not re.fullmatch(r'0x[0-9a-fA-F]+', address):
+    raise ValueError('Invalid owned window address')
+  target = next((m for m in hypr('monitors') if m.get('name') == monitor), None)
+  if target is None or type(target.get('id')) is not int:
+    raise ValueError('Selected output disappeared')
+  workspace = target.get('activeWorkspace', {}).get('id')
+  if type(workspace) is not int:
+    raise ValueError('Selected output has no active workspace')
+  window = 'address:' + address
+  for _ in range(3):
+    client = _client(address)
+    if client is None:
+      raise ValueError('Owned emulator window disappeared')
+    if client.get('monitor') == target['id']:
+      return target['id']
+    _dispatch('hl.dsp.window.move({ workspace = "' + str(workspace) + '", follow = false, window = "' + window + '" })',
+              ['movetoworkspacesilent', str(workspace) + ',' + window])
+  client = _client(address)
+  if client is None or client.get('monitor') != target['id']:
+    raise ValueError('Compositor refused to move the owned emulator window to the selected output')
+  return target['id']
+
+
+def present_direct(address, monitor):
+  """Fullscreen the owned client on the selected output, confirming both."""
+  output = move_to_monitor(address, monitor)
+  fullscreen_window(address)
+  client = _client(address)
+  if client is None or client.get('monitor') != output or client.get('fullscreen', 0) == 0:
+    raise ValueError('Owned emulator window is not fullscreen on the selected output')

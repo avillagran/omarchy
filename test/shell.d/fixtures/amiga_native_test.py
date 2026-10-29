@@ -212,7 +212,7 @@ class NativeTest(unittest.TestCase):
           return 'ok'
         stack.enter_context(patch.object(amiga, 'ipc', side_effect=ipc))
         stack.enter_context(patch.object(state, 'owned_window', return_value={'floating': True, 'size': [640, 480], 'address': '0xabc'}))
-        fullscreen = stack.enter_context(patch.object(amiga, 'fullscreen_window'))
+        fullscreen = stack.enter_context(patch.object(amiga, 'present_direct'))
         focus = stack.enter_context(patch.object(amiga, 'focus_window'))
         stack.enter_context(patch.object(state.subprocess, 'run'))
         audio = stack.enter_context(patch.object(state, 'OwnedAudio'))
@@ -253,7 +253,7 @@ class NativeTest(unittest.TestCase):
       stack.enter_context(patch.object(state, 'owned_window', side_effect=[tiled, tiled, ready, ready, ready]))
       stack.enter_context(patch.object(amiga, 'stage_capture_source', side_effect=lambda address: events.append('stage')))
       stack.enter_context(patch.object(amiga, 'focus_window', side_effect=lambda address: events.append('focus')))
-      stack.enter_context(patch.object(amiga, 'fullscreen_window', side_effect=lambda address: events.append('fullscreen')))
+      stack.enter_context(patch.object(amiga, 'present_direct', side_effect=lambda address, monitor: events.append('direct:' + monitor)))
       clock = [0.0]
       stack.enter_context(patch.object(state.time, 'monotonic', side_effect=lambda: clock[0]))
       stack.enter_context(patch.object(state.time, 'sleep', side_effect=lambda seconds: clock.__setitem__(0, clock[0] + 1)))
@@ -264,7 +264,35 @@ class NativeTest(unittest.TestCase):
       with self.assertRaises(InterruptedError):
         state.play(process, {'title': 'Fixture'}, token, 'TEST', amiga.APP_CLASS + '.' + token,
                    type('Log', (), {'name': str(log)})(), Mock(), 0)
-    self.assertEqual(events, ['stage', 'stage', 'focus', 'amigaPresent', 'amigaCommit', 'fullscreen', 'amigaDirect'])
+    self.assertEqual(events, ['stage', 'stage', 'focus', 'amigaPresent', 'amigaCommit', 'direct:TEST', 'amigaDirect'])
+
+  def test_direct_presentation_moves_the_window_to_the_selected_output(self):
+    from unittest.mock import Mock, patch
+    client = {'address': '0xabc', 'monitor': 1, 'fullscreen': 0}
+    monitors = [{'name': 'DP-1', 'id': 0, 'activeWorkspace': {'id': 3}}, {'name': 'HDMI-A-1', 'id': 1, 'activeWorkspace': {'id': 7}}]
+    calls = []
+    def hypr(*args):
+      return monitors if args == ('monitors',) else [dict(client)]
+    def run(command, **kwargs):
+      calls.append(command)
+      if 'hl.dsp.window.move' in command[2]:
+        client['monitor'] = 0
+      if 'hl.dsp.window.fullscreen' in command[2]:
+        client['fullscreen'] = 1
+      return Mock(returncode=0, stdout='ok\n')
+    with patch.object(amiga, 'hypr', side_effect=hypr), patch.object(amiga.subprocess, 'run', side_effect=run):
+      amiga.present_direct('0xabc', 'DP-1')
+    moves = [command[2] for command in calls if 'hl.dsp.window.move' in command[2]]
+    self.assertEqual(len(moves), 1)
+    self.assertIn('workspace = "3"', moves[0])
+    self.assertIn('address:0xabc', moves[0])
+    self.assertLess(calls.index(next(c for c in calls if 'hl.dsp.window.move' in c[2])),
+                    calls.index(next(c for c in calls if 'hl.dsp.window.fullscreen' in c[2])))
+    client.update(monitor=1, fullscreen=0)
+    with patch.object(amiga, 'hypr', side_effect=hypr), \
+         patch.object(amiga.subprocess, 'run', return_value=Mock(returncode=0, stdout='ok\n')), \
+         self.assertRaisesRegex(ValueError, 'selected output'):
+      amiga.present_direct('0xabc', 'DP-1')
 
   def test_capture_source_staging_floats_and_sizes_the_exact_window(self):
     from unittest.mock import Mock, patch
