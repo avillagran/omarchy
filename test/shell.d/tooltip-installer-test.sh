@@ -20,10 +20,13 @@ with tempfile.TemporaryDirectory(prefix='tooltip-installer-test.') as temp:
     write(fake/'omarchy-pkg-add' , '#!/bin/bash\nexit 0\n')
     write(fake/'pacman', '''#!/bin/bash
 if [[ $1 == -Q ]]; then echo 'quickshell 0.3.1-1'; exit 0; fi
+if [[ $1 == -Qi ]]; then printf 'Name            : quickshell\\nArchitecture    : any\\n'; exit 0; fi
 exit 99
 ''')
     write(fake/'sudo', '''#!/bin/bash
 printf '%s\\n' "$*" >> "$TEST_LOG"
+# The repository now publishes a newer release than the one installed.
+if [[ $1 == pacman && $2 == -Sw ]]; then touch "$5/quickshell-0.3.1-3-any.pkg.tar.xz"; exit 0; fi
 [[ $1 == pacman && $2 == -U ]] || exit 99
 if [[ $* == *new.pkg.tar* && $FAULT == package* ]]; then exit 42; fi
 if [[ $* == *previous.pkg.tar* && $FAULT == package-rollback ]]; then exit 43; fi
@@ -83,7 +86,41 @@ for d in ['backup','package','omarchy/shell','omarchy/test/shell.d']: (t/d).mkdi
             assert 'previous.pkg.tar' in log, (fault,log)
             if fault=='link': assert f'link {selected}' in log, log
             if fault.startswith('package'): assert 'link ' not in log, log
+        if fault=='package-rollback':
+            # The unfinished record blocks a new installation, and uninstall
+            # completes its recovery instead of reporting that nothing is installed.
+            again=subprocess.run(['/bin/bash',str(root/'default/tooltips/install'),'--base',str(source)],env=env,capture_output=True,text=True)
+            assert again.returncode!=0 and 'did not finish' in again.stderr,(again.stdout,again.stderr)
+            assert pending.exists()
+            recovered=subprocess.run(['/bin/bash',str(root/'default/tooltips/install'),'--uninstall'],env={**env,'FAULT':'none'},capture_output=True,text=True)
+            assert recovered.returncode==0,(recovered.stdout,recovered.stderr)
+            assert not pending.exists() and not state.exists()
+            assert (work/'log').read_text().count('previous.pkg.tar')==2, (work/'log').read_text()
+            assert selection.read_text()==configured(selected)
+            print('ok - uninstall recovers an unfinished tooltip installation')
         print('ok - tooltip installer transaction: '+fault)
+
+    # Rollback needs the installed release, not another cached or newer one.
+    work=base/'other-release'
+    for name in ['quickshell-0.3.1-2-any.pkg.tar.xz','quickshell-0.3.1-1-x86_64.pkg.tar.xz']:
+        cached=work/'cache/omarchy/tooltips/stock'/name
+        cached.parent.mkdir(parents=True,exist_ok=True)
+        cached.touch()
+    selected=work/'selected'
+    (selected/'shell').mkdir(parents=True)
+    selection=work/'selection'
+    selection.write_text(configured(selected))
+    env={**os.environ, 'PATH':str(fake)+':'+os.environ['PATH'], 'HOME':str(work),
+         'XDG_STATE_HOME':str(work/'state'), 'XDG_DATA_HOME':str(work/'data'),
+         'XDG_CACHE_HOME':str(work/'cache'), 'XDG_CONFIG_HOME':str(work/'config'),
+         'OMARCHY_PATH':str(source), 'TEST_SELECTION':str(selection), 'TOOLTIP_OMARCHY_CONF':str(selection),
+         'FAULT':'none', 'TEST_LOG':str(work/'log')}
+    run=subprocess.run(['/bin/bash',str(root/'default/tooltips/install'),'--base',str(source)],env=env,capture_output=True,text=True)
+    assert run.returncode!=0 and 'quickshell-0.3.1-1-any' in run.stderr,(run.stdout,run.stderr)
+    log=(work/'log').read_text()
+    assert 'pacman -Sw' in log and 'pacman -U' not in log and 'installed ' not in log, log
+    assert not (work/'state/omarchy/tooltip-trial.json').exists()
+    print('ok - tooltip installer keeps only the installed release for rollback')
 
     # A package installation has no /etc/omarchy.conf. The caller's OMARCHY_PATH
     # must not turn the feature checkout into the copy source or rollback target.

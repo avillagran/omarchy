@@ -29,7 +29,7 @@ exec 9>"$state_dir/tooltip-trial.lock"
 flock -n 9 || { echo "Another tooltip installation is active." >&2; exit 1; }
 
 read_state() {
-  python3 - "$state_file" "$1" <<'PY'
+  python3 - "$1" "$2" <<'PY'
 import json, sys
 print(json.load(open(sys.argv[1]))[sys.argv[2]])
 PY
@@ -61,25 +61,41 @@ selected_root=$(configured_selection)
 if [[ -z $base_root ]]; then
   base_root=$selected_root
 fi
+if [[ -f $state_file && -f $state_file.pending ]]; then
+  echo "Both $state_file and $state_file.pending exist; review them before proceeding." >&2
+  exit 1
+fi
 if (( remove )); then
-  [[ -f $state_file ]] || { echo "No tooltip trial installed by this command."; exit 0; }
-  previous=$(read_state previousOmarchy)
-  selected=$(read_state trialOmarchy)
-  package=$(read_state previousPackage)
+  # A pending record is an installation that stopped before it finished, or
+  # whose automatic restoration failed. Uninstall completes its recovery.
+  record=$state_file
+  [[ -f $record ]] || record=$state_file.pending
+  [[ -f $record ]] || { echo "No tooltip trial installed by this command."; exit 0; }
+  previous=$(read_state "$record" previousOmarchy)
+  selected=$(read_state "$record" trialOmarchy)
+  package=$(read_state "$record" previousPackage)
   # Do not overwrite a dev link changed by another development task.
   configured=$(configured_selection)
-  [[ $configured == "$selected" ]] || { echo "Omarchy selection changed after this trial; review before uninstalling." >&2; exit 1; }
+  if [[ $configured != "$selected" && ( $record == "$state_file" || $configured != "$previous" ) ]]; then
+    echo "Omarchy selection changed after this trial; review before uninstalling." >&2
+    exit 1
+  fi
   [[ -f $package ]] || { echo "Rollback package missing: $package" >&2; exit 1; }
   sudo pacman -U --noconfirm "$package"
   restore_selection "$previous"
-  mv "$state_file" "$state_file.removed"
+  mv "$record" "$state_file.removed"
   echo "Restored the previous runtime and Omarchy selection. Reboot after saving your work."
   exit 0
 fi
 
+if [[ -f $state_file.pending ]]; then
+  echo "An earlier tooltip installation did not finish: $state_file.pending" >&2
+  echo "Run 'omarchy install tooltips --uninstall' to restore the previous runtime and selection first." >&2
+  exit 1
+fi
 if [[ -f $state_file ]]; then
   configured=$(configured_selection)
-  if [[ $configured == "$(read_state trialOmarchy)" ]]; then
+  if [[ $configured == "$(read_state "$state_file" trialOmarchy)" ]]; then
     echo "The tooltip trial is already installed. Uninstall it before selecting a newer trial."
     exit 0
   else
@@ -97,12 +113,20 @@ installed_version=$(pacman -Q quickshell | cut -d' ' -f2)
 omarchy-pkg-add base-devel git cmake ninja qt6-base qt6-declarative qt6-shadertools wayland-protocols libpipewire polkit cpptrace jemalloc libxcb
 cache_dir=${XDG_CACHE_HOME:-$HOME/.cache}/omarchy/tooltips
 mkdir -p "$cache_dir/stock"
+# Rollback restores this archive, so it must be the installed release and
+# architecture, not merely another cached or newly published 0.3.1 build.
+installed_arch=$(LC_ALL=C pacman -Qi quickshell | sed -n 's/^Architecture *: *//p')
+[[ -n $installed_arch ]] || { echo "Could not read the installed Quickshell architecture." >&2; exit 1; }
+stock_version=$installed_version
+# A prior trial is rebuilt from an original 0.3.1 release; rollback restores
+# that trial's own package instead (checked below).
+[[ $installed_version == 0.3.1-* ]] || stock_version='0.3.1-*'
 find_stock() {
-  python3 - "$cache_dir/stock" <<'PY'
+  python3 - "$cache_dir/stock" "quickshell-$stock_version-$installed_arch.pkg.tar.*" <<'PY'
 from pathlib import Path
 import subprocess, sys
 for directory in [Path('/var/cache/pacman/pkg'), Path(sys.argv[1])]:
-    for path in sorted(directory.glob('quickshell-0.3.1-*.pkg.tar.*'), reverse=True):
+    for path in sorted(directory.glob(sys.argv[2]), reverse=True):
         if path.name.endswith('.sig'):
             continue
         print(path)
@@ -114,7 +138,10 @@ if [[ -z $stock ]]; then
   sudo pacman -Sw --noconfirm --cachedir "$cache_dir/stock" quickshell
   stock=$(find_stock)
 fi
-[[ -n $stock ]] || { echo "The original Quickshell 0.3.1 package is required for safe rollback." >&2; exit 1; }
+[[ -n $stock ]] || {
+  echo "The installed Quickshell package (quickshell-$installed_version-$installed_arch) is not in the pacman cache; it is required for safe rollback." >&2
+  exit 1
+}
 previous_package=$stock
 previous_root=$selected_root
 if [[ $installed_version != 0.3.1-* ]]; then
