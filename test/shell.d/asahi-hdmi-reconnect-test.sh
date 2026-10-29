@@ -27,7 +27,9 @@ assert 'INSTALL_MOD_PATH="$pkgdir/usr"' in recipe
 assert 'provides=' not in recipe and 'conflicts=' not in recipe and 'replaces=' not in recipe
 assert 'pacman -' not in build and 'grub-' not in build and 'makepkg -i' not in build
 assert 'validate-package.py' in build
-subprocess.run(['bash', '-n', str(patches / 'build-hdmi-reconnect.sh'), str(patches / 'PKGBUILD')], check=True)
+# bash -n checks only its first file; the rest become arguments. Check each.
+for filename in ('build-hdmi-reconnect.sh', 'PKGBUILD'):
+    subprocess.run(['bash', '-n', str(patches / filename)], check=True)
 # Argument validation must fail before any source/build/host mutation.
 result = subprocess.run(['bash', str(patches / 'build-hdmi-reconnect.sh')], capture_output=True, text=True)
 assert result.returncode == 2 and 'Usage:' in result.stderr
