@@ -211,8 +211,20 @@ def install(archive, destination=None):
       if destination.is_symlink():
         raise ValueError('Collection destination cannot be a symlink')
       # Preflight the entire merge BEFORE changing any existing collection.
+      # SHA256SUMS is the collection index, so it is merged rather than
+      # compared: a path already listed must keep exactly the same hash.
+      checksums = destination / 'SHA256SUMS'
+      if checksums.is_symlink():
+        raise ValueError('Collection checksum list cannot be a symlink')
+      existing = inventory(destination) if checksums.exists() else {}
+      for name, value in sums.items():
+        if existing.get(name, value) != value:
+          raise ValueError('Existing asset checksum differs; refusing overwrite: ' + name)
+      merged = dict(existing, **sums)
       additions = []
       for child in stage.iterdir():
+        if child.name == 'SHA256SUMS':
+          continue
         target = destination / child.name
         if target.exists() or target.is_symlink():
           if target.is_symlink() or target.is_dir() != child.is_dir():
@@ -229,13 +241,26 @@ def install(archive, destination=None):
         else:
           additions.append((child, target))
       destination.mkdir(exist_ok=True)
+      merged_list = Path(temp) / 'SHA256SUMS.merged'
+      merged_list.write_text(''.join(f'{merged[name]}  {name}\n' for name in sorted(merged)))
+      previous_list = Path(temp) / 'SHA256SUMS.previous'
       installed = []
+      replaced = False
       try:
         for child, target in additions:
           os.rename(child, target)
           installed.append((child, target))
+        if checksums.exists():
+          os.link(checksums, previous_list)
+        os.rename(merged_list, checksums)
+        replaced = True
         load(destination)
       except BaseException:
+        if replaced:
+          if previous_list.exists():
+            os.rename(previous_list, checksums)
+          else:
+            checksums.unlink()
         for child, target in reversed(installed):
           os.rename(target, child)
         raise
