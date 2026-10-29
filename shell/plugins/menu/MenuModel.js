@@ -760,17 +760,20 @@ function queryEncode(s) {
 // displayModel-compatible object. The QML side owns the action string, but
 // the pure shape and label logic live here. Web rows go in the "fallback"
 // section, placed below the search matches; every other plugin's row goes in
-// "results", above them.
-function queryPluginRow(plugin, query, result, lang) {
+// "results", above them. `lang` picks the plugin's own `i18n` name; `tr` is
+// an optional translate(key, english) from the QML side (I18n.t), and without
+// it the English text stands, which is what the Node tests assert.
+function queryPluginRow(plugin, query, result, lang, tr) {
+  var t = typeof tr === "function" ? tr : function(key, english) { return english }
   // Multi-line output stays intact for the action; the one-line row shows its
   // lines joined.
   var value = String(result || "").trim().replace(/\s*\n\s*/g, " ")
   var label = value || query
   var detail = ""
   if (plugin.action === "copy") {
-    detail = lang === "es" ? "Copiar al portapapeles" : "Copy to clipboard"
+    detail = t("menu.queryCopy", "Copy to clipboard")
   } else if (plugin.action === "run") {
-    detail = lang === "es" ? "Abrir" : "Open"
+    detail = t("menu.queryOpen", "Open")
   }
   // Icons: the plugin's own `icon` always wins (bundled key, image path, or
   // glyph); math/web fall back to the bundled calc/search SVG keys. Rendering
@@ -786,7 +789,8 @@ function queryPluginRow(plugin, query, result, lang) {
     var webLabel = plugin.builtin ? "" : queryPluginLabel(plugin, lang)
     if (webLabel === plugin.id) webLabel = ""
     if (/^https?:\/\//.test(query)) label = query
-    else label = (webLabel ? webLabel + ": " : (lang === "es" ? "Buscar: " : "Search: ")) + query
+    else if (webLabel) label = t("menu.queryPluginLabel", "%1: %2").replace("%1", webLabel).replace("%2", query)
+    else label = t("menu.querySearch", "Search: %1").replace("%1", query)
   } else {
     // copy/run/snippet: the result stays the prominent label and the plugin's
     // localized name becomes the detail, so `label`/`i18n` have a visible

@@ -1154,6 +1154,10 @@ Item {
     return MenuModel.queryPluginsForQuery(root.queryPluginMap, query)
   }
 
+  function queryTranslate(key, english) {
+    return Commons.I18n.t(key, english)
+  }
+
   function queryPluginLanguage(plugin) {
     return plugin.language || root.language || "en"
   }
@@ -1185,7 +1189,7 @@ Item {
       var runner = root.makeQueryRunner(p, query, root.queryPluginRevision)
       if (!runner) continue
       runners[p.id] = runner
-      var placeholder = MenuModel.queryPluginRow(p, query, "", root.queryPluginLanguage(p))
+      var placeholder = MenuModel.queryPluginRow(p, query, "", root.queryPluginLanguage(p), root.queryTranslate)
       placeholder.disabled = true
       rows.push(placeholder)
     }
@@ -1253,7 +1257,7 @@ Item {
     if (failed) {
       rows.splice(rowIndex, 1)
     } else {
-      filled = MenuModel.queryPluginRow(plugin, query, value, root.queryPluginLanguage(plugin))
+      filled = MenuModel.queryPluginRow(plugin, query, value, root.queryPluginLanguage(plugin), root.queryTranslate)
       filled.action = root.queryRowAction(plugin, query, value)
       rows[rowIndex] = filled
     }
