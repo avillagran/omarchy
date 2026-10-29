@@ -16,6 +16,22 @@ import "I18nSystem.js" as System
 // entry with plural forms.
 // The language file is watched, so switching language under Setup
 // re-renders the shell without a restart.
+//
+// Runtime translation by English source string (tr, trc, ntr) is the
+// second half of this file, for text the shell does not own: labels a
+// plugin hands to the Ui kit. Button, Toggle, PanelToolTip, PanelHero and
+// PanelActionButton wrap their label bindings in I18n.tr(), so a plugin
+// built on qs.Ui translates without changes to its source. Sources, lowest
+// to highest precedence:
+//   1. Startup snapshot: the merge from the previous session, read
+//      synchronously so the first frame is already translated
+//   2. System gettext catalogs (gtk30, gtk40, glib20, ...) read through
+//      msgunfmt for the picked language: the common desktop vocabulary
+//   3. A plugin's own i18n.json, registered by shell.qml, for the strings
+//      the system catalogs do not cover
+// All lookup logic lives in I18nModel.js and I18nSystem.js, which the Node
+// tests in test/shell.d/i18n-runtime-test.sh load directly. English has
+// no candidates, so with English picked every tr() returns its source.
 QtObject {
   id: root
 
@@ -118,39 +134,16 @@ QtObject {
     onFileChanged: reload()
   }
 
-  // Runtime translation by source string (tr, trc, ntr), for labels the
-  // Ui kit renders on behalf of plugins.
-
   // ---------------------------------------------------------------------
-  // Locale
+  // Runtime translation by source string
 
-  readonly property var candidates: Model.localeCandidates({
-    LANGUAGE: Quickshell.env("LANGUAGE"),
-    LC_ALL: Quickshell.env("LC_ALL"),
-    LC_MESSAGES: Quickshell.env("LC_MESSAGES"),
-    LANG: Quickshell.env("LANG")
-  })
+  // gettext locale names for the picked language, most preferred first:
+  // ["pt_BR", "pt"], ["nb_NO", "nb"]. Empty for English.
+  readonly property var candidates: Model.languageCandidates(root.language, root.localeSettings.locale)
+  readonly property string candidatesKey: candidates.join(" ")
 
-  // Primary gettext language code ("ca" for ca_ES, or the first LANGUAGE
-  // entry). Empty means English / C: nothing to translate and no cache to
-  // keep. Distinct from language above, the code picked under Setup.
-  readonly property string gettextLanguage: candidates.length > 0 ? candidates[0].split("_")[0] : ""
-
-  // Where a pack's locale sits in the user's preference order, for use as
-  // its registration precedence. -1 means the pack does not apply.
-  function precedenceFor(locale) {
-    var normalized = Model.normalizeLocale(locale)
-    if (!normalized) return -1
-    var index = candidates.indexOf(normalized)
-    if (index === -1) index = candidates.indexOf(normalized.split("_")[0])
-    return index
-  }
-
-  // ---------------------------------------------------------------------
-  // Lookup
-
-  // Bumped on every registry change. Read inside every lookup so QML
-  // bindings that call tr() depend on it and repaint when catalogs change.
+  // Bumped on every registry change. Read inside every lookup so bindings
+  // that call tr() depend on it and repaint when catalogs change.
   property int revision: 0
   property var _registry: Model.createRegistry()
 
@@ -164,6 +157,9 @@ QtObject {
     return root._registry.translatePlural(count, singular, plural, options)
   }
 
+  // I18n.tr("Connect"), I18n.trc("verb", "Open"),
+  // I18n.ntr(n, "%1 city", "%1 cities", [n]). %1-style args are filled in
+  // one pass, so an argument holding "%2" is inserted verbatim.
   function tr(source, args) {
     return _lookup(source, { args: args })
   }
@@ -182,8 +178,8 @@ QtObject {
     return source
   }
 
-  // A translator bound to one domain: lookups walk the domain, its
-  // clonedFrom parents, then the global merge.
+  // A translator bound to one domain: lookups walk the domain, its linked
+  // parents, then the global merge.
   function domain(id) {
     var d = String(id === undefined || id === null ? "" : id)
     return {
@@ -201,9 +197,6 @@ QtObject {
     }
   }
 
-  // ---------------------------------------------------------------------
-  // Registration
-
   // Replace an owner's whole contribution atomically.
   //   catalogs  { domain: catalog }   one po2json-shaped object per domain
   //   options   { links: { childDomain: parentDomain }, precedence: int }
@@ -213,72 +206,76 @@ QtObject {
     return result
   }
 
+  // Register an i18n.json-shaped object ({ "<locale>": catalog }) under one
+  // domain: every catalog matching a candidate, in preference order, so a
+  // string missing from es_MX falls back to es. Returns how many locales
+  // were registered; with none, the owner's earlier catalogs are cleared.
+  function setLocaleCatalogs(ownerId, domainId, byLocale, precedence) {
+    var list = Model.selectLocaleCatalogs(byLocale, root.candidates)
+    var count = root._registry.setLocaleCatalogs(String(ownerId), String(domainId), list, { precedence: precedence })
+    root._changed()
+    return count
+  }
+
   function clearCatalogs(ownerId) {
     var removed = root._registry.clearOwner(String(ownerId))
     if (removed) root._changed()
     return removed
   }
 
+  // Once every live source has had its chance (the plugin scan finished),
+  // drop cached domains no source will refresh: a plugin removed or
+  // disabled since the snapshot was written.
+  function settleCache(keepDomains) {
+    if (root._registry.settleCache(keepDomains)) root._changed()
+  }
+
   function _changed() {
-    root.revision = root._registry.revision()
+    root.revision++
     root.cacheWriteTimer.restart()
   }
 
   // ---------------------------------------------------------------------
   // System gettext catalogs
   //
-  // Runs once at startup: for the first candidate locale that has any of
-  // the well-known desktop domains, msgunfmt concatenates them into PO
-  // text, which I18nSystem.js folds into one catalog. Registered below the
-  // plugin i18n.json source so an author can still override a string.
-  // The merge is persisted into the startup snapshot, so subsequent logins
-  // render translated on the first frame and this process only refreshes.
+  // One msgunfmt run per language: every candidate locale that ships any
+  // of the desktop domains becomes its own layer under "omarchy.system",
+  // precedence 200 and down, below a plugin's i18n.json (100) so an author
+  // can still override a string. Re-run when the language changes.
 
-  readonly property var systemDomains: ["gtk30", "gtk40", "glib20", "gdk-pixbuf", "gnome-desktop-3.0"]
+  readonly property string systemDomain: "omarchy.system"
 
-  function _systemCatalogCommand() {
-    var candidates = []
-    for (var i = 0; i < root.candidates.length; i++) {
-      // /usr/share/locale directories never carry an encoding suffix.
-      var bare = String(root.candidates[i]).replace(/\..*$/, "")
-      if (bare && candidates.indexOf(bare) === -1) candidates.push(bare)
+  function _reloadSystemCatalogs() {
+    root.systemCatalogProcess.running = false
+    var command = System.catalogCommand(root.candidates)
+    if (command.length === 0) return
+    root.systemCatalogProcess.command = command
+    // Started on the next tick so a run stopped above has exited first;
+    // its late reply carries the old request and is dropped.
+    Qt.callLater(function() { root.systemCatalogProcess.running = true })
+  }
+
+  function _systemCatalogsLoaded(output) {
+    var result = System.buildLocaleCatalogs(output)
+    // A reply for a language that is no longer picked.
+    if (result.request === null || result.request !== System.requestKey(root.candidates)) return
+    if (result.catalogs.length === 0) {
+      root.clearCatalogs("system:gettext")
+      if (root._registry.retireCached([root.systemDomain])) root._changed()
+      return
     }
-    if (candidates.length === 0) return []
-
-    var script = ""
-      + "DOMAINS=\"" + root.systemDomains.join(" ") + "\"\n"
-      + "for loc in " + candidates.join(" ") + "; do\n"
-      + "  files=\"\"\n"
-      + "  for d in $DOMAINS; do\n"
-      + "    f=\"/usr/share/locale/$loc/LC_MESSAGES/$d.mo\"\n"
-      + "    [ -f \"$f\" ] && files=\"$files '$f'\"\n"
-      + "  done\n"
-      + "  if [ -n \"$files\" ]; then\n"
-      + "    echo \"X-OMARCHY-SYSTEM-LOCALE: $loc\"\n"
-      + "    eval msgunfmt --no-wrap $files\n"
-      + "    exit 0\n"
-      + "  fi\n"
-      + "done\n"
-      + "exit 1\n"
-    return ["bash", "-c", script]
+    var entries = 0
+    for (var i = 0; i < result.catalogs.length; i++) entries += result.catalogs[i].entries
+    console.log("I18n: system gettext catalogs for " + root.candidatesKey + " (" + entries + " entries)")
+    root._registry.setLocaleCatalogs("system:gettext", root.systemDomain, result.catalogs, { precedence: 200 })
+    root._changed()
   }
 
   property Process systemCatalogProcess: Process {
-    command: root._systemCatalogCommand()
-    running: true
-    onExited: function(exitCode) {
-      if (exitCode !== 0) return
-      var output = systemCatalogStdout.text || ""
-      var marker = output.indexOf("\n")
-      if (marker === -1) return
-      var catalog = System.buildCatalog([output.slice(marker + 1)])
-      var keys = Object.keys(catalog).length
-      if (keys > 0) {
-        console.log("I18n: system gettext catalog for " + root.candidates.join(", ")
-          + " (" + (keys - (catalog[""] ? 1 : 0)) + " entries)")
-        root.setCatalogs("system:gettext", ({ "omarchy.system": catalog }), { precedence: 200 })
-      }
-    }
+    running: false
+    // Exits 1 with only the request line when no locale has a catalog,
+    // which still settles the cached system domain.
+    onExited: function(exitCode) { root._systemCatalogsLoaded(systemCatalogStdout.text || "") }
     stdout: StdioCollector {
       id: systemCatalogStdout
       waitForEnd: true
@@ -286,39 +283,40 @@ QtObject {
   }
 
   // ---------------------------------------------------------------------
-  // Startup cache
+  // Startup snapshot, per language: $XDG_CACHE_HOME/omarchy/i18n/<code>.json
 
   readonly property string cacheDir: {
     var xdg = Quickshell.env("XDG_CACHE_HOME")
     var base = xdg ? String(xdg) : String(Quickshell.env("HOME")) + "/.cache"
     return base.replace(/\/$/, "") + "/omarchy/i18n"
   }
-  readonly property string cachePath: gettextLanguage ? cacheDir + "/" + gettextLanguage + ".json" : ""
+  // Set by _applyLanguage rather than bound: a binding here could still
+  // hold the previous language when candidatesKeyChanged runs, and the
+  // snapshot would then be read from, and written to, the wrong file.
+  property string cachePath: ""
 
+  // The path is set by _applyLanguage, which then reads the file itself:
+  // blockLoading makes text() synchronous, so the snapshot is in place
+  // before the first frame, and always lands in the registry for the
+  // language it belongs to. A missing file reads as empty: English until a
+  // source registers.
   property FileView cacheFile: FileView {
-    path: root.cachePath
-    // Synchronous on purpose: the whole point is having catalogs before the
-    // bar's first frame. The file is small and local.
     blockLoading: true
     atomicWrites: true
     printErrors: false
-    onLoaded: root._loadCache(text())
-    // No cache yet, or unreadable: English until a pack registers.
-    onLoadFailed: function(error) { }
   }
 
   function _loadCache(raw) {
     var text = String(raw || "").trim()
     if (!text) return
     try {
-      var parsed = JSON.parse(text)
-      if (root._registry.loadSnapshot(parsed)) root.revision = root._registry.revision()
+      if (root._registry.loadSnapshot(JSON.parse(text))) root.revision++
     } catch (error) {
       console.warn("I18n: ignoring unreadable cache at " + root.cachePath + ": " + error)
     }
   }
 
-  // Registrations arrive in bursts (one pack per locale, a rescan); coalesce
+  // Registrations arrive in bursts (one per plugin, a rescan); coalesce
   // them into one write.
   property Timer cacheWriteTimer: Timer {
     interval: 250
@@ -328,7 +326,29 @@ QtObject {
 
   function _writeCache() {
     if (!root.cachePath) return
-    var snapshot = root._registry.snapshot()
-    root.cacheFile.setText(JSON.stringify(snapshot) + "\n")
+    root.cacheFile.setText(JSON.stringify(root._registry.snapshot()) + "\n")
   }
+
+  // Runs at startup and on every language switch. A switch starts a fresh
+  // registry, since the old language's catalogs and snapshot no longer
+  // apply; shell.qml re-registers plugin catalogs on candidatesKeyChanged.
+  property bool _applied: false
+
+  function _applyLanguage() {
+    root.cacheWriteTimer.stop()
+    if (root._applied) {
+      root._registry = Model.createRegistry()
+      root.revision++
+    }
+    root._applied = true
+    root.cachePath = root.candidates.length > 0 ? root.cacheDir + "/" + root.language + ".json" : ""
+    if (root.cacheFile.path !== root.cachePath) root.cacheFile.path = root.cachePath
+    else if (root.cachePath) root.cacheFile.reload()
+    if (root.cachePath) root._loadCache(root.cacheFile.text())
+    root._reloadSystemCatalogs()
+  }
+
+  onCandidatesKeyChanged: if (root._applied) root._applyLanguage()
+
+  Component.onCompleted: root._applyLanguage()
 }

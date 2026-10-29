@@ -12,7 +12,7 @@
 // msgunfmt lives in I18n.qml.
 //
 // Catalog build rules:
-//   - fuzzy and untranslated entries are dropped
+//   - fuzzy and untranslated entries (every form empty) are dropped
 //   - GTK/Qt accelerator markers are normalized: "_Save" and "&Save" also
 //     register under "Save" (plain keys win when both exist)
 //   - the first domain wins on conflicts; later domains only fill gaps
@@ -142,20 +142,21 @@ function buildCatalog(texts) {
         }
         continue
       }
-      var untranslated = !e.msgstr[0]
-      if (untranslated && !e.msgid_plural) continue
+      var translated = false
+      for (var f = 0; f < e.msgstr.length; f++) if (e.msgstr[f]) translated = true
+      if (!translated) continue
 
       if (e.msgid_plural) {
-        if (catalog[e.msgid] === undefined) {
-          catalog[e.msgid] = { msgid_plural: e.msgid_plural, msgstr: e.msgstr.slice() }
-        }
+        var forms = []
+        for (var k = 0; k < e.msgstr.length; k++) forms.push(e.msgstr[k] || "")
+        if (catalog[e.msgid] === undefined) catalog[e.msgid] = { msgid_plural: e.msgid_plural, msgstr: forms }
         // Plain variant without accelerators, on both msgid and msgstr:
         // "Pane" must yield "Panel"/"Paneles", not accelerator-marked text.
         var plainP = stripAccelerators(e.msgid)
         if (plainP !== e.msgid && plainP && catalog[plainP] === undefined) {
           catalog[plainP] = {
             msgid_plural: stripAccelerators(e.msgid_plural),
-            msgstr: e.msgstr.map(function(s) { return stripAccelerators(s) })
+            msgstr: forms.map(function(s) { return stripAccelerators(s) })
           }
         }
       } else {
@@ -176,6 +177,99 @@ function buildCatalog(texts) {
   return catalog
 }
 
-var api = { parsePoEntries: parsePoEntries, stripAccelerators: stripAccelerators, buildCatalog: buildCatalog }
+// ---------------------------------------------------------------------------
+// The msgunfmt run. One bash process walks every candidate locale in
+// preference order and prints each locale's domains as one PO document
+// behind a marker line, so the registry can fall back per string from a
+// partial regional catalog (es_MX) to the language (es) and on down a
+// LANGUAGE list. Locales are passed as arguments, never spliced into the
+// script. The first line echoes the request so a reply that arrives after
+// the language changed can be recognized and dropped. Exits 1 when no
+// locale had any catalog.
+
+var REQUEST_MARKER = "X-OMARCHY-SYSTEM-REQUEST: "
+var LOCALE_MARKER = "X-OMARCHY-SYSTEM-LOCALE: "
+var DOMAINS = ["gtk30", "gtk40", "glib20", "gdk-pixbuf", "gnome-desktop-3.0"]
+
+function catalogCommand(candidates, localeDir) {
+  var locales = []
+  var list = Array.isArray(candidates) ? candidates : []
+  for (var i = 0; i < list.length; i++) {
+    // /usr/share/locale directories never carry an encoding suffix.
+    var bare = String(list[i]).replace(/\..*$/, "")
+    if (/^[a-z]{2,3}(_[A-Z]{2}|_[0-9]{3})?$/.test(bare) && locales.indexOf(bare) === -1) locales.push(bare)
+  }
+  if (locales.length === 0) return []
+  var script = ""
+    + "dir=$1; shift\n"
+    + "domains=(" + DOMAINS.join(" ") + ")\n"
+    + "printf '" + REQUEST_MARKER + "%s\\n' \"$*\"\n"
+    + "found=0\n"
+    + "for loc in \"$@\"; do\n"
+    + "  files=()\n"
+    + "  for d in \"${domains[@]}\"; do\n"
+    + "    f=\"$dir/$loc/LC_MESSAGES/$d.mo\"\n"
+    + "    [[ -f $f ]] && files+=(\"$f\")\n"
+    + "  done\n"
+    + "  (( ${#files[@]} )) || continue\n"
+    + "  printf '" + LOCALE_MARKER + "%s\\n' \"$loc\"\n"
+    + "  msgunfmt --no-wrap \"${files[@]}\" && found=1\n"
+    + "done\n"
+    + "(( found ))\n"
+  return ["bash", "-c", script, "bash", String(localeDir || "/usr/share/locale")].concat(locales)
+}
+
+function requestKey(candidates) {
+  var command = catalogCommand(candidates)
+  return command.slice(5).join(" ")
+}
+
+// Splits the command's output into { request, sections: [{ locale, text }] }.
+function parseCatalogOutput(output) {
+  var lines = String(output || "").replace(/\r\n/g, "\n").split("\n")
+  var result = { request: null, sections: [] }
+  var current = null
+  for (var i = 0; i < lines.length; i++) {
+    var line = lines[i]
+    if (result.request === null && line.indexOf(REQUEST_MARKER) === 0) {
+      result.request = line.slice(REQUEST_MARKER.length)
+      continue
+    }
+    if (line.indexOf(LOCALE_MARKER) === 0) {
+      current = { locale: line.slice(LOCALE_MARKER.length), lines: [] }
+      result.sections.push(current)
+      continue
+    }
+    if (current) current.lines.push(line)
+  }
+  for (var s = 0; s < result.sections.length; s++) {
+    result.sections[s] = { locale: result.sections[s].locale, text: result.sections[s].lines.join("\n") }
+  }
+  return result
+}
+
+// One catalog per locale section, most preferred first, ready for
+// registry.setLocaleCatalogs. Sections that yield nothing are dropped.
+function buildLocaleCatalogs(output) {
+  var parsed = parseCatalogOutput(output)
+  var list = []
+  for (var i = 0; i < parsed.sections.length; i++) {
+    var catalog = buildCatalog([parsed.sections[i].text])
+    var entries = Object.keys(catalog).length - (catalog[""] ? 1 : 0)
+    if (entries > 0) list.push({ locale: parsed.sections[i].locale, catalog: catalog, entries: entries })
+  }
+  return { request: parsed.request, catalogs: list }
+}
+
+var api = {
+  DOMAINS: DOMAINS,
+  parsePoEntries: parsePoEntries,
+  stripAccelerators: stripAccelerators,
+  buildCatalog: buildCatalog,
+  catalogCommand: catalogCommand,
+  requestKey: requestKey,
+  parseCatalogOutput: parseCatalogOutput,
+  buildLocaleCatalogs: buildLocaleCatalogs
+}
 
 if (typeof module !== "undefined" && module.exports) module.exports = api

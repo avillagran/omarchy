@@ -10,7 +10,10 @@
 //   owner     whoever registered a set of catalogs, normally a language pack;
 //             owners are replaced atomically and can be cleared
 //   catalog   one JSON object per domain, po2json/Jed shape: a "" header entry
-//             plus msgid -> msgstr, or msgid -> [forms] for plurals
+//             plus msgid -> msgstr. A plural is msgid -> [forms] or
+//             msgid -> { msgid_plural, msgstr: [forms] }; both load as the
+//             object shape, stamped with the plural rule of the catalog it
+//             came from so entries from different locales can share a domain
 //   link      child domain -> parent domain, from a clone's omarchy.clonedFrom
 
 var CONTEXT_SEPARATOR = "\u0004"
@@ -25,7 +28,8 @@ function normalizeLocale(value) {
   if (locale === "C" || locale === "POSIX") return ""
   var parts = locale.split("_")
   var language = parts[0].toLowerCase()
-  if (!language) return ""
+  // ISO 639 codes only: the result names /usr/share/locale directories.
+  if (!/^[a-z]{2,3}$/.test(language)) return ""
   // Region ISO 3166 (2 letras) o numérica UN M.49 (3 dígitos, p. ej. es_419).
   // El script BCP-47 (zh_Hans_CN) no existe en nombres de locale glibc/gettext:
   // se omite y se conserva la región, que es lo que los catálogos usan.
@@ -57,6 +61,17 @@ function localeCandidates(environment) {
     if (language === "en") break
   }
   return candidates
+}
+
+// Candidates for the language picked under Setup > Language: the registry
+// code ("pt-BR", "no") and its glibc locale ("pt_BR.UTF-8", "nb_NO.UTF-8"),
+// which names the directories gettext catalogs live in. English is the
+// source language, so it has no candidates and nothing is translated.
+function languageCandidates(code, glibcLocale) {
+  var language = String(code || "").trim()
+  if (!language || language === "en" || language.indexOf("en-") === 0) return []
+  var candidates = localeCandidates({ LANGUAGE: String(glibcLocale || "") || language })
+  return candidates.length > 0 && candidates[0].split("_")[0] === "en" ? [] : candidates
 }
 
 // ---------------------------------------------------------------------------
@@ -180,6 +195,8 @@ function parsePluralExpression(text) {
 }
 
 // Returns { nplurals, plural(n) } or null when the header is absent/invalid.
+var pluralRuleCache = {}
+
 function parsePluralForms(header) {
   var text = String(header || "")
   var countMatch = text.match(/nplurals\s*=\s*(\d+)/)
@@ -203,33 +220,97 @@ function parsePluralForms(header) {
 
 // ---------------------------------------------------------------------------
 // Catalog validation. A catalog is a plain object; the "" entry is a header
-// object; every other value is a string or an array of strings. Anything else
+// object; every other value is a non-empty string or a plural. Anything else
 // is dropped entry-by-entry so one bad line does not lose the whole file.
+//
+// Plurals arrive as an array of forms (po2json) or as an object
+// { msgid_plural, msgstr: [forms] } (msgunfmt output and i18n.json). Both
+// are normalized to { msgstr: [forms], "plural-forms": rule }, where the
+// rule is the entry's own "plural-forms" or else the catalog header's. The
+// rule travels with the entry, so a domain that folds catalogs of several
+// locales (es_MX over es, or a LANGUAGE list) picks each entry's form with
+// the rule of the language it was written in.
+
+function headerPluralRule(header) {
+  if (!header || typeof header !== "object") return ""
+  var rule = header["plural-forms"] || header["Plural-Forms"]
+  return typeof rule === "string" ? rule : ""
+}
+
+function sanitizePlural(forms, rule) {
+  if (!Array.isArray(forms) || forms.length === 0) return null
+  var translated = false
+  for (var i = 0; i < forms.length; i++) {
+    if (typeof forms[i] !== "string") return null
+    if (forms[i] !== "") translated = true
+  }
+  // Every form empty means untranslated: let the English source answer.
+  if (!translated) return null
+  var entry = { msgstr: forms.slice() }
+  if (rule) entry["plural-forms"] = rule
+  return entry
+}
 
 function sanitizeCatalog(raw) {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null
   var out = {}
+  var header = raw[""]
+  if (header && typeof header === "object" && !Array.isArray(header)) out[""] = header
+  var catalogRule = headerPluralRule(out[""])
   for (var key in raw) {
-    if (!Object.prototype.hasOwnProperty.call(raw, key)) continue
+    if (!Object.prototype.hasOwnProperty.call(raw, key) || key === "") continue
     var value = raw[key]
-    if (key === "") {
-      if (value && typeof value === "object" && !Array.isArray(value)) out[""] = value
+    if (typeof value === "string") {
+      if (value !== "") out[key] = value
       continue
     }
-    if (typeof value === "string") { out[key] = value; continue }
-    if (Array.isArray(value) && value.length > 0) {
-      var ok = true
-      for (var i = 0; i < value.length; i++) if (typeof value[i] !== "string") { ok = false; break }
-      if (ok) out[key] = value.slice()
+    var plural = null
+    if (Array.isArray(value)) {
+      plural = sanitizePlural(value, catalogRule)
+    } else if (value && typeof value === "object") {
+      var own = typeof value["plural-forms"] === "string" ? value["plural-forms"] : ""
+      if (typeof value.msgstr === "string") {
+        if (value.msgstr !== "") out[key] = value.msgstr
+        continue
+      }
+      plural = sanitizePlural(value.msgstr, own || catalogRule)
     }
+    if (plural) out[key] = plural
   }
   return out
 }
 
-function headerPluralForms(catalog) {
-  var header = catalog && catalog[""]
-  if (!header) return null
-  return parsePluralForms(header["plural-forms"] || header["Plural-Forms"])
+function pluralRule(text) {
+  var key = String(text || "")
+  if (!key) return null
+  if (!Object.prototype.hasOwnProperty.call(pluralRuleCache, key)) pluralRuleCache[key] = parsePluralForms(key)
+  return pluralRuleCache[key]
+}
+
+// Locale catalogs that apply, in the user's preference order. byLocale is
+// an i18n.json-shaped object ({ "es": catalog, "pt-BR": catalog }); keys are
+// normalized like the candidates, so "pt-BR" and "pt_BR" are the same. Every
+// matching catalog is returned, not just the first: a partial es_MX catalog
+// still falls back to es per string.
+function selectLocaleCatalogs(byLocale, candidates) {
+  var list = []
+  if (!byLocale || typeof byLocale !== "object" || Array.isArray(byLocale)) return list
+  var byNormalized = {}
+  for (var key in byLocale) {
+    if (!Object.prototype.hasOwnProperty.call(byLocale, key)) continue
+    var normalized = normalizeLocale(key)
+    if (normalized && byNormalized[normalized] === undefined) byNormalized[normalized] = byLocale[key]
+  }
+  var wanted = Array.isArray(candidates) ? candidates : []
+  for (var i = 0; i < wanted.length; i++) {
+    var locale = normalizeLocale(wanted[i])
+    var catalog = byNormalized[locale]
+    if (!locale || !catalog || typeof catalog !== "object" || Array.isArray(catalog)) continue
+    var seen = false
+    for (var j = 0; j < list.length; j++) if (list[j].locale === locale) seen = true
+    if (!seen) list.push({ locale: locale, catalog: catalog })
+  }
+  return list
 }
 
 // ---------------------------------------------------------------------------
@@ -243,18 +324,24 @@ function headerPluralForms(catalog) {
 function createRegistry() {
   var owners = {}          // ownerId -> { catalogs, links, precedence, order }
   var nextOrder = 0
-  var state = { revision: 0, merged: {}, global: {}, parents: {}, plurals: {} }
+  var state = { revision: 0, merged: {}, global: {}, parents: {} }
 
   // The startup cache is registered as an ordinary owner at the lowest
-  // precedence so it can answer lookups for the frames before the real packs
-  // register. It is only ever a stand-in: once a live pack has registered,
-  // the cache copy is dropped and no longer reloadable, so disabling that
-  // pack actually reverts the interface instead of falling back to a stale
-  // duplicate of the strings it just removed.
+  // precedence so it can answer lookups for the frames before the live
+  // sources register. It is a stand-in per domain: a domain's cached copy is
+  // retired once a live source has registered that domain (or the caller
+  // says the domain has no live source any more), and never comes back for
+  // the life of the registry. Everything else stays cached, so a small
+  // plugin catalog arriving first does not throw away the system catalog
+  // that is still loading.
   var CACHE_OWNER = "cache"
-  var liveOwnerSeen = false
+  var retired = {}         // domain -> true once its cached copy is retired
 
-  // Fold a list of owners into { merged, parents, plurals, global }.
+  function hasOwn(object, key) {
+    return Object.prototype.hasOwnProperty.call(object, key)
+  }
+
+  // Fold a list of owners into { merged, parents, global }.
   function computeState(list) {
     // Lower precedence number wins. Among equals, the later registration
     // wins, which is what lets a pack refresh itself by re-registering.
@@ -275,11 +362,6 @@ function createRegistry() {
       for (var child in owner.links) parents[child] = owner.links[child]
     }
 
-    var plurals = {}
-    for (var d = 0; d < domainOrder.length; d++) {
-      plurals[domainOrder[d]] = headerPluralForms(merged[domainOrder[d]])
-    }
-
     // Global merge: a domain's ancestors are folded before it, so a clone's
     // translation shadows the original's for unbound callers.
     var global = {}
@@ -293,7 +375,7 @@ function createRegistry() {
     }
     for (var o = 0; o < domainOrder.length; o++) fold(domainOrder[o], 0)
 
-    return { merged: merged, global: global, parents: parents, plurals: plurals }
+    return { merged: merged, global: global, parents: parents }
   }
 
   function ownerList(excludeId) {
@@ -307,8 +389,31 @@ function createRegistry() {
     state.merged = next.merged
     state.global = next.global
     state.parents = next.parents
-    state.plurals = next.plurals
     state.revision++
+  }
+
+  // Drop the cached copy of each domain. Returns true when the cache changed.
+  function retireDomains(domains) {
+    var cache = owners[CACHE_OWNER]
+    var changed = false
+    for (var i = 0; i < domains.length; i++) {
+      var domain = String(domains[i])
+      retired[domain] = true
+      if (cache && hasOwn(cache.catalogs, domain)) {
+        delete cache.catalogs[domain]
+        changed = true
+      }
+    }
+    if (cache && Object.keys(cache.catalogs).length === 0) delete owners[CACHE_OWNER]
+    return changed
+  }
+
+  // True when an owner other than the cache supplies the domain.
+  function liveDomain(domain) {
+    for (var id in owners) {
+      if (id !== CACHE_OWNER && hasOwn(owners[id].catalogs, domain)) return true
+    }
+    return false
   }
 
   // Domain chain for a bound caller: the domain, then its parents.
@@ -329,11 +434,11 @@ function createRegistry() {
     var domains = chain(domain)
     for (var i = 0; i < domains.length; i++) {
       var cat = state.merged[domains[i]]
-      if (cat && Object.prototype.hasOwnProperty.call(cat, key) && key !== "") {
+      if (cat && hasOwn(cat, key) && key !== "") {
         return { value: cat[key], domain: domains[i] }
       }
     }
-    return Object.prototype.hasOwnProperty.call(state.global, key) ? state.global[key] : null
+    return hasOwn(state.global, key) ? state.global[key] : null
   }
 
   function translate(source, options) {
@@ -342,26 +447,71 @@ function createRegistry() {
     var key = contextKey(opts.context, fallback)
     var hit = lookup(key, opts.domain)
     var value = hit ? hit.value : fallback
-    if (Array.isArray(value)) value = value[0]
+    if (value && typeof value === "object") value = value.msgstr[0] || fallback
     return interpolate(value, opts.args)
   }
 
   function translatePlural(count, singular, plural, options) {
     var opts = options || {}
     var n = Number(count) || 0
+    var english = ENGLISH_PLURAL.plural(n) === 0 ? singular : plural
     var key = contextKey(opts.context, String(singular === undefined || singular === null ? "" : singular))
     var hit = lookup(key, opts.domain)
-    var text
-    if (hit && Array.isArray(hit.value)) {
-      var rule = state.plurals[hit.domain] || ENGLISH_PLURAL
-      var index = rule.plural(n)
-      text = hit.value[index] !== undefined ? hit.value[index] : hit.value[hit.value.length - 1]
+    var text = english
+    if (hit && hit.value && typeof hit.value === "object") {
+      var forms = hit.value.msgstr
+      var rule = pluralRule(hit.value["plural-forms"]) || ENGLISH_PLURAL
+      var form = forms[rule.plural(n)]
+      if (form === undefined) form = forms[forms.length - 1]
+      if (form) text = form
     } else if (hit && typeof hit.value === "string") {
       text = hit.value
-    } else {
-      text = ENGLISH_PLURAL.plural(n) === 0 ? singular : plural
     }
     return interpolate(text, opts.args)
+  }
+
+  function cleanCatalogs(catalogs) {
+    var clean = {}
+    var raw = catalogs && typeof catalogs === "object" ? catalogs : {}
+    for (var domain in raw) {
+      var cat = sanitizeCatalog(raw[domain])
+      if (cat) clean[String(domain)] = cat
+    }
+    return clean
+  }
+
+  function cleanLinks(rawLinks) {
+    var links = {}
+    var source = rawLinks && typeof rawLinks === "object" ? rawLinks : {}
+    for (var child in source) {
+      if (typeof source[child] === "string" && source[child] && source[child] !== child) {
+        links[String(child)] = source[child]
+      }
+    }
+    return links
+  }
+
+  function putOwner(ownerId, clean, links, precedence) {
+    owners[ownerId] = {
+      catalogs: clean,
+      links: links,
+      precedence: typeof precedence === "number" ? precedence : 0,
+      order: nextOrder++
+    }
+  }
+
+  // Owners registered by setLocaleCatalogs are named "<ownerId>@<locale>".
+  function removeOwnerFamily(ownerId) {
+    var removed = false
+    var prefix = ownerId + "@"
+    for (var id in owners) {
+      if (id === CACHE_OWNER) continue
+      if (id === ownerId || id.indexOf(prefix) === 0) {
+        delete owners[id]
+        removed = true
+      }
+    }
+    return removed
   }
 
   // Replace an owner's whole contribution atomically.
@@ -369,48 +519,86 @@ function createRegistry() {
   //   options    { links: { child: parent }, precedence: number }
   function setCatalogs(ownerId, catalogs, options) {
     var opts = options || {}
-    var clean = {}
-    var raw = catalogs && typeof catalogs === "object" ? catalogs : {}
-    for (var domain in raw) {
-      var cat = sanitizeCatalog(raw[domain])
-      if (cat) clean[String(domain)] = cat
-    }
-    var links = {}
-    var rawLinks = opts.links && typeof opts.links === "object" ? opts.links : {}
-    for (var child in rawLinks) {
-      if (typeof rawLinks[child] === "string" && rawLinks[child] && rawLinks[child] !== child) {
-        links[String(child)] = rawLinks[child]
-      }
-    }
-    var existing = owners[ownerId]
-    owners[ownerId] = {
-      catalogs: clean,
-      links: links,
-      precedence: typeof opts.precedence === "number" ? opts.precedence : 0,
-      order: nextOrder++
-    }
-    if (ownerId !== CACHE_OWNER) {
-      liveOwnerSeen = true
-      delete owners[CACHE_OWNER]
-    }
+    var id = String(ownerId)
+    if (id === CACHE_OWNER) return "rejected"
+    var clean = cleanCatalogs(catalogs)
+    var existing = !!owners[id]
+    putOwner(id, clean, cleanLinks(opts.links), opts.precedence)
+    retireDomains(Object.keys(clean))
     rebuild()
     return existing ? "replaced" : "added"
   }
 
+  // Register one domain's catalogs for several locales at once, most
+  // preferred first ({ locale, catalog } items, see selectLocaleCatalogs).
+  // Each locale becomes its own owner one precedence step below the
+  // previous, so lookups fall back per string: a key missing from es_MX is
+  // answered by es, then by the next LANGUAGE entry. Replaces every owner
+  // this ownerId registered before.
+  function setLocaleCatalogs(ownerId, domain, list, options) {
+    var opts = options || {}
+    var id = String(ownerId)
+    var name = String(domain)
+    if (id === CACHE_OWNER) return 0
+    var base = typeof opts.precedence === "number" ? opts.precedence : 0
+    var hadAny = removeOwnerFamily(id)
+    var registered = 0
+    var items = Array.isArray(list) ? list : []
+    for (var i = 0; i < items.length; i++) {
+      var item = items[i]
+      if (!item || !item.locale) continue
+      var catalogs = {}
+      catalogs[name] = item.catalog
+      var clean = cleanCatalogs(catalogs)
+      if (!clean[name]) continue
+      putOwner(id + "@" + item.locale, clean, {}, base + i)
+      registered++
+    }
+    if (registered > 0) retireDomains([name])
+    if (registered > 0 || hadAny) rebuild()
+    return registered
+  }
+
+  // Removes the owner and every per-locale owner registered under its id.
   function clearOwner(ownerId) {
-    if (!owners[ownerId]) return false
-    delete owners[ownerId]
+    var id = String(ownerId)
+    if (id === CACHE_OWNER || !removeOwnerFamily(id)) return false
     rebuild()
     return true
   }
 
-  // Serializable view of the merged state, for the startup cache. The
-  // snapshot excludes the cache owner: otherwise disabling every pack would
-  // write the old cache back out and the translations would return at the
-  // next login.
-  function snapshot(options) {
-    var exclude = options && options.exclude !== undefined ? options.exclude : CACHE_OWNER
-    var view = computeState(ownerList(exclude))
+  // Retire cached domains by name: for a source that finished loading and
+  // turned out to have nothing (no system catalog for the language).
+  function retireCached(domains) {
+    var changed = retireDomains(Array.isArray(domains) ? domains : [])
+    if (changed) rebuild()
+    return changed
+  }
+
+  // Retire every cached domain not in keep: once the plugin scan is done,
+  // a cached domain whose plugin is gone or disabled has no live source.
+  function settleCache(keep) {
+    var cache = owners[CACHE_OWNER]
+    if (!cache) return false
+    var keepSet = {}
+    var wanted = Array.isArray(keep) ? keep : []
+    for (var i = 0; i < wanted.length; i++) keepSet[String(wanted[i])] = true
+    var stale = []
+    for (var domain in cache.catalogs) if (!keepSet[domain]) stale.push(domain)
+    return retireCached(stale)
+  }
+
+  function cachedDomains() {
+    var cache = owners[CACHE_OWNER]
+    return cache ? Object.keys(cache.catalogs) : []
+  }
+
+  // Serializable view of the merged state, for the startup cache. Cached
+  // domains still waiting for their live source are included, so a snapshot
+  // written before the system catalog loads does not lose it; retired ones
+  // are already gone from the cache owner.
+  function snapshot() {
+    var view = computeState(ownerList())
     var catalogs = {}
     for (var domain in view.merged) catalogs[domain] = view.merged[domain]
     var links = {}
@@ -418,19 +606,35 @@ function createRegistry() {
     return { version: 1, catalogs: catalogs, links: links }
   }
 
-  function loadSnapshot(snap, ownerId) {
+  // Load a startup snapshot as the cache owner. Domains a live source has
+  // already registered, or whose cached copy was retired, are skipped:
+  // writing the cache re-triggers the FileView that loads it, and that
+  // reload must not resurrect a domain that was just disabled.
+  function loadSnapshot(snap) {
     if (!snap || typeof snap !== "object" || snap.version !== 1) return false
-    // Writing the cache re-triggers the FileView that loads it. Without this
-    // a pack's own registration would come straight back in as a cache owner
-    // that outlives it.
-    if (liveOwnerSeen && (ownerId || CACHE_OWNER) === CACHE_OWNER) return false
-    setCatalogs(ownerId || CACHE_OWNER, snap.catalogs, { links: snap.links, precedence: 1000 })
+    var raw = snap.catalogs && typeof snap.catalogs === "object" ? snap.catalogs : {}
+    var pending = {}
+    var count = 0
+    for (var domain in raw) {
+      if (!hasOwn(raw, domain) || retired[domain] || liveDomain(domain)) continue
+      pending[domain] = raw[domain]
+      count++
+    }
+    if (count === 0) return false
+    var clean = cleanCatalogs(pending)
+    if (Object.keys(clean).length === 0) return false
+    putOwner(CACHE_OWNER, clean, cleanLinks(snap.links), 1000)
+    rebuild()
     return true
   }
 
   return {
     setCatalogs: setCatalogs,
+    setLocaleCatalogs: setLocaleCatalogs,
     clearOwner: clearOwner,
+    retireCached: retireCached,
+    settleCache: settleCache,
+    cachedDomains: cachedDomains,
     lookup: lookup,
     chain: chain,
     translate: translate,
@@ -447,9 +651,11 @@ if (typeof module !== "undefined") module.exports = {
   CONTEXT_SEPARATOR: CONTEXT_SEPARATOR,
   normalizeLocale: normalizeLocale,
   localeCandidates: localeCandidates,
+  languageCandidates: languageCandidates,
   interpolate: interpolate,
   contextKey: contextKey,
   parsePluralForms: parsePluralForms,
   sanitizeCatalog: sanitizeCatalog,
+  selectLocaleCatalogs: selectLocaleCatalogs,
   createRegistry: createRegistry
 }
