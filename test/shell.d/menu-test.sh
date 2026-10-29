@@ -457,6 +457,8 @@ const webRow = menu.queryPluginRow(plugins['omarchy.query.web'], 'weather', 'htt
 assertDeepEqual([webRow.label, webRow.detail, webRow.section], ['Search: weather', 'Open', 'fallback'], 'a web row is a search below the search matches')
 assertEqual(menu.queryPluginRow(plugins['omarchy.query.web'], 'https://example.com', 'https://example.com', 'en').label, 'https://example.com', 'a URL row shows the URL')
 assertEqual(menu.queryPluginRow(translate['com.example.tr'], 'tr hola', 'https://x', 'en').label, 'Translate: tr hola', 'a user web row names its plugin')
+assertEqual(menu.queryPluginRow(plugins['omarchy.query.web'], 'bash $$ $& %2', 'u', 'en').label, 'Search: bash $$ $& %2', 'a search label shows the query literally')
+assertEqual(menu.queryPluginRow({ ...translate['com.example.tr'], label: 'T $&' }, 'tr %1 $$', 'u', 'en').label, 'T $&: tr %1 $$', 'a user web label shows its name and query literally')
 const clipRow = menu.queryPluginRow(plugins['com.example.clip'], '> hi', 'hello\nworld\n', 'en')
 assertDeepEqual([clipRow.label, clipRow.detail, clipRow.icon], ['hello world', 'Clip', '󰅌'], 'a copy row shows its output on one line, its plugin name and its icon')
 const tr = (key, english) => '[' + key + '] ' + english

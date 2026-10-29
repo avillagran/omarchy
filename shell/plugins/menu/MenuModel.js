@@ -789,8 +789,9 @@ function queryPluginRow(plugin, query, result, lang, tr) {
     var webLabel = plugin.builtin ? "" : queryPluginLabel(plugin, lang)
     if (webLabel === plugin.id) webLabel = ""
     if (/^https?:\/\//.test(query)) label = query
-    else if (webLabel) label = t("menu.queryPluginLabel", "%1: %2").replace("%1", webLabel).replace("%2", query)
-    else label = t("menu.querySearch", "Search: %1").replace("%1", query)
+    // Callbacks keep `$` sequences in the query or name literal.
+    else if (webLabel) label = t("menu.queryPluginLabel", "%1: %2").replace(/%[12]/g, function(token) { return token === "%1" ? webLabel : query })
+    else label = t("menu.querySearch", "Search: %1").replace("%1", function() { return query })
   } else {
     // copy/run/snippet: the result stays the prominent label and the plugin's
     // localized name becomes the detail, so `label`/`i18n` have a visible
