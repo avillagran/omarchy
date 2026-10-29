@@ -18,18 +18,14 @@
 set -uo pipefail
 
 expr="${1:-}"
-if [[ -z "$expr" ]]; then
+if [[ -z $expr ]]; then
   expr="$(cat)"
 fi
 
-# Empty input is not an error worth printing.
-[[ -z "${expr// }" ]] && exit 0
-
 # Users expect `^` to mean exponentiation (Alfred/Raycast style), not XOR.
-# Rewrite `^` to `**` before parsing via sed so the literal `**` never hits
-# the shell as a glob. The AST whitelist below still rejects every other
-# operator, so this only relaxes the one symbol people reach for.
-expr="$(printf '%s' "$expr" | sed 's/\^/**/g')"
+# The AST whitelist below still rejects every other operator, so this only
+# relaxes the one symbol people reach for.
+expr="${expr//^/**}"
 
 timeout 2 python3 - "$expr" <<'PY'
 import sys, ast, math
@@ -104,6 +100,10 @@ def ev(node):
         args = [ev(a) for a in node.args]
         return checked(ALLOWED_NAMES[node.func.id](*args))
     raise ValueError("unsupported expression")
+
+# Empty input is not an error worth printing.
+if not sys.argv[1].strip():
+    sys.exit(0)
 
 try:
     # Parsing a pathological input can itself be slow; real expressions are short.
