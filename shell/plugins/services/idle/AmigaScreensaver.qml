@@ -1,4 +1,5 @@
 import QtQuick
+import qs.Commons
 
 // Optional native dependency is loaded only on demand, never at shell startup.
 Item {
@@ -13,11 +14,9 @@ Item {
     runtimeSource = source
     return "ok"
   }
-  function begin(owner, monitor, hintOn, hintOff) {
+  function begin(owner, monitor) {
     if (guard.status === Loader.Error) guard.active = false
     if (!guard.item) { guard.active = true; return "preparing" }
-    guard.item.hintOn = hintOn
-    guard.item.hintOff = hintOff
     return guard.item.begin(owner, monitor)
   }
   function poll(owner) { return guard.item ? guard.item.poll(owner) : "closed" }
@@ -33,6 +32,9 @@ Item {
     active: false
     source: root.runtimeSource
   }
+  // Bound, not copied, so an open guard follows a language switch.
+  Binding { target: guard.item; property: "hintOn"; value: I18n.t("screensaver.amigaAudioOn"); when: !!guard.item }
+  Binding { target: guard.item; property: "hintOff"; value: I18n.t("screensaver.amigaAudioOff"); when: !!guard.item }
   Connections {
     target: guard.item
     function onOpened(owner) { root.opened(owner) }

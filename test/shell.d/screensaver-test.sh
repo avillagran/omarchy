@@ -88,14 +88,13 @@ const loads = []
 const lazyState = { Loader: { Error: 3 }, guard: { item: null, status: 3, set active(value) { loads.push(value) } } }
 vm.createContext(lazyState)
 vm.runInContext(wrapper.match(/^  function begin[\s\S]*?^  }/m)[0], lazyState)
-assertEqual(lazyState.begin(owner, 'TEST', 'on', 'off'), 'preparing', 'lazy dependency remains optional')
+assertEqual(lazyState.begin(owner, 'TEST'), 'preparing', 'lazy dependency remains optional')
 assertEqual(JSON.stringify(loads), '[false,true]', 'a previously missing native package can be retried without restarting the shell')
 const service = fs.readFileSync(path.join(root, 'shell/plugins/services/idle/Service.qml'), 'utf8')
 let clock = 10000
 let dismissals = 0
 const lockState = {
   Date: { now: () => clock },
-  I18n: { t: key => key },
   lockActive: true, lockCheckedAt: 0, lockProbeStartedAt: 0, lockStatusMaxAge: 1000,
   amigaWatching: false, amigaTouchedAt: 0, amigaWatchGrace: 5000,
   lockStatusProbe: { running: false },

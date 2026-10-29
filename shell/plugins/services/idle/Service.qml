@@ -444,7 +444,7 @@ Item {
         root.refreshLockStatus()
         return "locked"
       }
-      return amigaScreensaver.begin(owner, monitor, I18n.t("screensaver.amigaAudioOn"), I18n.t("screensaver.amigaAudioOff"))
+      return amigaScreensaver.begin(owner, monitor)
     }
 
     function amigaPoll(owner: string): string {
