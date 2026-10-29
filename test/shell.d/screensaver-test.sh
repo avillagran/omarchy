@@ -28,14 +28,14 @@ assert(!guard.includes('color: "black"\n      exclusionMode'), 'layer surface it
 assert(guard.includes('captureSource: panel.screen.name === root.monitorName ? root.source : null'), 'capture is restricted to the selected output and owned toplevel')
 assert(guard.includes('function captureStopped()') && guard.includes('root.captureStopped()'), 'failed toplevel capture falls back to direct fullscreen presentation')
 assert(guard.includes('id: captureDeadline') && guard.includes('interval: 1500') && guard.includes('captureDeadline.restart()'), 'missing screencopy callbacks use a bounded direct-presentation fallback')
-assert(guard.includes('panel.screen.name !== root.monitorName || !root.captureFailed'), 'capture failure reveals only the target output')
+assert(guard.includes('panel.screen.name !== root.monitorName || !root.directPresented'), 'capture failure reveals only the target output, and only after direct presentation')
 assert(!guard.includes('!root.covered ? "transparent" : "black"'), 'presentation never relies on a transparent layer above the emulator')
 assert(guard.includes('visible: root.active\n') && !guard.includes('visible: root.active && root.panelsVisible'), 'black transition shield remains mapped while priming the restored source')
 const vm = require('vm')
 const state = {
   token: '', monitorName: '', appId: '', reason: '', dismissed: false, hintOn: 'on', hintOff: 'off',
   requestedMuted: true, audioMuted: true, audioRevision: 0, frameReady: false,
-  presentationGeneration: 0, titlePendingGeneration: 0, titlePending: false, pendingAppId: '', captureFailed: false,
+  presentationGeneration: 0, titlePendingGeneration: 0, titlePending: false, pendingAppId: '', captureFailed: false, directPresented: false,
   source: {},
   get active() { return this.token !== '' },
   motion: { ready: true }, lease: { restart() {}, stop() {} },
@@ -58,9 +58,16 @@ assert(state.appId === '' && state.pendingAppId.endsWith(owner), 'staging cannot
 assertEqual(state.commit(owner), 'ok', 'owner binds the opaque capture over the black shield')
 assert(state.pendingAppId === '' && state.appId.endsWith(owner), 'commit binds capture to the exact staged source')
 assert(!state.frameReady && state.titlePending, 'presentation waits for owned ScreencopyView content')
+assertEqual(state.direct(owner), 'closed', 'direct presentation needs a capture failure')
 state.captureStopped()
-assert(state.captureFailed && state.frameReady, 'capture failure reveals the validated fullscreen client')
-state.captureFailed = false; state.frameReady = false; state.titlePending = true
+assert(state.captureFailed && !state.frameReady, 'capture failure keeps the black shield up')
+assert(JSON.parse(state.poll(owner)).captureFailed, 'capture failure is reported to the controller')
+state.frameArrived(state.presentationGeneration)
+assert(!state.frameReady, 'late capture content cannot reveal after a capture failure')
+assertEqual(state.direct('b'.repeat(32)), 'closed', 'only the owner confirms direct presentation')
+assertEqual(state.direct(owner), 'ok', 'owner confirms the fullscreen client')
+assert(state.directPresented && state.frameReady, 'direct presentation reveals the fullscreen client')
+state.captureFailed = false; state.directPresented = false; state.frameReady = false; state.titlePending = true
 state.frameArrived(state.presentationGeneration)
 assert(state.frameReady && !state.titlePending, 'owned capture content marks the presentation ready')
 state.requestNavigation('next')

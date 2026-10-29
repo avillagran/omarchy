@@ -39,6 +39,7 @@ TestCase {
  property string pendingAppId: ""
  property bool frameReady: false
  property bool captureFailed: false
+ property bool directPresented: false
  property var source: ({})
 
  property string demoTitle: ""
@@ -77,7 +78,7 @@ TestCase {
  function seat(isIdle) {}
  function press(event) { PRESS }
  function release(event) { RELEASE }
- function init() { hint.stop(); titleHint.stop(); dismissed = false; reason = ""; armed = true; requestedMuted = true; audioRevision = 0; presentationGeneration = 0; titlePendingGeneration = 0; titlePending = false; appId = ""; pendingAppId = ""; captureFailed = false }
+ function init() { hint.stop(); titleHint.stop(); dismissed = false; reason = ""; armed = true; requestedMuted = true; audioRevision = 0; presentationGeneration = 0; titlePendingGeneration = 0; titlePending = false; appId = ""; pendingAppId = ""; captureFailed = false; directPresented = false }
  function m(repeat) { return {key: Qt.Key_M, isAutoRepeat: repeat, accepted: false} }
  function test_seat_before_m() {
    seat(false); press(m(false)); verify(!dismissed, "M dismissed via " + reason)

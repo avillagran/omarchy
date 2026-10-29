@@ -91,6 +91,37 @@ def source_geometry_ready(window):
   return window.get('floating') is True and window.get('size') == [640, 480]
 
 
+def _dispatch(action, classic):
+  """Run a Lua dispatcher, falling back to the classic form on older Hyprland."""
+  result = subprocess.run(['hyprctl', 'dispatch', action], capture_output=True, text=True, timeout=3)
+  if result.returncode != 0 or result.stdout.strip() != 'ok':
+    subprocess.run(['hyprctl', 'dispatch', *classic], capture_output=True, timeout=3)
+
+
+def focus_window(address):
+  """Focus the exact owned client so the compositor schedules its buffers while
+  the exclusive capture guard covers it."""
+  if not re.fullmatch(r'0x[0-9a-fA-F]+', address):
+    raise ValueError('Invalid owned window address')
+  target = 'address:' + address
+  _dispatch('hl.dsp.focus({ window = "' + target + '" })', ['focuswindow', target])
+
+
+def stage_capture_source(address):
+  """Float and size the owned client to the checked 640x480 capture source.
+
+  Both requests are idempotent; the caller re-reads the client and presents
+  only once source_geometry_ready() observes the result.
+  """
+  if not re.fullmatch(r'0x[0-9a-fA-F]+', address):
+    raise ValueError('Invalid owned window address')
+  target = 'address:' + address
+  _dispatch('hl.dsp.window.float({ window = "' + target + '", action = "on" })', ['setfloating', target])
+  _dispatch('hl.dsp.window.resize({ window = "' + target + '", x = 640, y = 480, relative = false })',
+            ['resizewindowpixel', 'exact 640 480,' + target])
+  focus_window(address)
+
+
 def _fullscreen_confirmed(address):
   try:
     for client in hypr('clients'):

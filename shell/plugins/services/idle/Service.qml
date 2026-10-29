@@ -469,6 +469,12 @@ Item {
       return amigaScreensaver.commit(owner)
     }
 
+    function amigaDirect(owner: string): string {
+      root.watchAmiga()
+      if (!root.lockStatusAllowsAmiga()) return "closed"
+      return amigaScreensaver.direct(owner)
+    }
+
     function amigaAudioApplied(owner: string, revision: int, muted: bool): string {
       root.watchAmiga()
       if (!root.lockStatusAllowsAmiga()) return "closed"

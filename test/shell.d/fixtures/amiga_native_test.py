@@ -220,6 +220,7 @@ class NativeTest(unittest.TestCase):
         stack.enter_context(patch.object(amiga, 'ipc', side_effect=ipc))
         stack.enter_context(patch.object(state, 'owned_window', return_value={'floating': True, 'size': [640, 480], 'address': '0xabc'}))
         fullscreen = stack.enter_context(patch.object(amiga, 'fullscreen_window'))
+        focus = stack.enter_context(patch.object(amiga, 'focus_window'))
         stack.enter_context(patch.object(state.subprocess, 'run'))
         audio = stack.enter_context(patch.object(state, 'OwnedAudio'))
         audio.return_value.find.return_value = None
@@ -229,7 +230,70 @@ class NativeTest(unittest.TestCase):
                      amiga.APP_CLASS + '.' + token, type('Log', (), {'name': str(log)})(), Mock(), 0)
         self.assertEqual('amigaPresent' in calls, expected)
         self.assertEqual('amigaCommit' in calls, expected)
-        self.assertEqual(fullscreen.call_count, 2 if expected else 0)
+        self.assertEqual(focus.call_count, 1 if expected else 0)
+        # The capture source stays at its checked floating size.
+        fullscreen.assert_not_called()
+
+  def test_capture_source_is_sized_before_presentation_and_fullscreened_only_on_capture_failure(self):
+    import contextlib
+    from unittest.mock import Mock, patch
+    import state
+    token = 'a' * 32
+    protocol = ''.join(f'OMARCHY_FRAME_V1 {token} {event}\n' for event in
+                       ('protocol 1', 'restored 1', 'frame 1 7 640 480 0123456789abcdef'))
+    tiled = {'floating': False, 'size': [1920, 1080], 'address': '0xabc'}
+    ready = {'floating': True, 'size': [640, 480], 'address': '0xabc'}
+    with tempfile.TemporaryDirectory() as tmp, contextlib.ExitStack() as stack:
+      log = Path(tmp) / 'owned.log'
+      log.write_text(protocol)
+      events, polls = [], [0]
+      def ipc(method, *args):
+        if method == 'amigaPoll':
+          polls[0] += 1
+          if polls[0] > 5:
+            return json.dumps({'state': 'dismissed', 'reason': 'motion'})
+          return json.dumps({'state': 'active', 'audioRevision': 0, 'requestedMuted': True,
+                             'captureFailed': polls[0] >= 4})
+        events.append(method)
+        return 'ok'
+      stack.enter_context(patch.object(amiga, 'ipc', side_effect=ipc))
+      stack.enter_context(patch.object(state, 'owned_window', side_effect=[tiled, tiled, ready, ready, ready]))
+      stack.enter_context(patch.object(amiga, 'stage_capture_source', side_effect=lambda address: events.append('stage')))
+      stack.enter_context(patch.object(amiga, 'focus_window', side_effect=lambda address: events.append('focus')))
+      stack.enter_context(patch.object(amiga, 'fullscreen_window', side_effect=lambda address: events.append('fullscreen')))
+      clock = [0.0]
+      stack.enter_context(patch.object(state.time, 'monotonic', side_effect=lambda: clock[0]))
+      stack.enter_context(patch.object(state.time, 'sleep', side_effect=lambda seconds: clock.__setitem__(0, clock[0] + 1)))
+      audio = stack.enter_context(patch.object(state, 'OwnedAudio'))
+      audio.return_value.find.return_value = None
+      process = Mock()
+      process.poll.return_value = None
+      with self.assertRaises(InterruptedError):
+        state.play(process, {'title': 'Fixture'}, token, 'TEST', amiga.APP_CLASS + '.' + token,
+                   type('Log', (), {'name': str(log)})(), Mock(), 0)
+    self.assertEqual(events, ['stage', 'stage', 'focus', 'amigaPresent', 'amigaCommit', 'fullscreen', 'amigaDirect'])
+
+  def test_capture_source_staging_floats_and_sizes_the_exact_window(self):
+    from unittest.mock import Mock, patch
+    calls = []
+    def run(command, **kwargs):
+      calls.append(command)
+      return Mock(returncode=0, stdout='ok\n')
+    with patch.object(amiga.subprocess, 'run', side_effect=run):
+      amiga.stage_capture_source('0xabc')
+    self.assertEqual(len(calls), 3)
+    self.assertIn('hl.dsp.window.float', calls[0][2])
+    self.assertIn('hl.dsp.window.resize', calls[1][2])
+    self.assertIn('x = 640, y = 480', calls[1][2])
+    self.assertIn('hl.dsp.focus', calls[2][2])
+    self.assertTrue(all('address:0xabc' in command[2] for command in calls))
+    calls.clear()
+    with patch.object(amiga.subprocess, 'run', side_effect=lambda command, **kwargs: calls.append(command) or Mock(returncode=0, stdout='Invalid dispatcher\n')):
+      amiga.stage_capture_source('0xabc')
+    self.assertIn(['hyprctl', 'dispatch', 'setfloating', 'address:0xabc'], calls)
+    self.assertIn(['hyprctl', 'dispatch', 'resizewindowpixel', 'exact 640 480,address:0xabc'], calls)
+    with self.assertRaises(ValueError):
+      amiga.stage_capture_source('0xabc; reload')
 
   def test_restore_errors_override_completion_markers(self):
     import state
@@ -385,7 +449,7 @@ class NativeTest(unittest.TestCase):
         clock[0] += 1
       stack.enter_context(patch.object(amiga, 'ipc', side_effect=ipc))
       stack.enter_context(patch.object(state, 'owned_window', return_value={'floating': True, 'size': [640, 480], 'address': '0xabc'}))
-      stack.enter_context(patch.object(amiga, 'fullscreen_window'))
+      stack.enter_context(patch.object(amiga, 'focus_window'))
       stack.enter_context(patch.object(state.subprocess, 'run'))
       stack.enter_context(patch.object(state.time, 'monotonic', side_effect=lambda: clock[0]))
       stack.enter_context(patch.object(state.time, 'sleep', side_effect=sleep))

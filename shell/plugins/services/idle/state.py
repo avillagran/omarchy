@@ -18,7 +18,7 @@ import pack
 import renderer
 import runtime as runtime_integrity
 from audio import OwnedAudio, hint_labels
-from amiga import owned_window
+from amiga import owned_window, source_geometry_ready
 from history import History
 
 
@@ -184,10 +184,10 @@ def sandbox_command(demo, temporary, token):
 
 
 def play(process, demo, owner, monitor, appid, log, history, handled, timeout=None):
-  start, shown, revision = time.monotonic(), False, None
+  start, shown, direct, revision = time.monotonic(), False, False, None
   # The startup deadline runs from launch; the demo's own duration runs only
   # from the first revealed frame, so a slow restore never shortens playback.
-  playing_since = None
+  playing_since, staged_at = None, None
   timeout = demo_timeout(demo) if timeout is None else timeout
   audio = OwnedAudio(appid, os.environ)
   while True:
@@ -216,19 +216,31 @@ def play(process, demo, owner, monitor, appid, log, history, handled, timeout=No
       # token-bound Wayland toplevel is the exact crash signal for recovery.
       return handled, 'crash'
     if restored and window and not shown:
-      # Prime the exact restored Wayland client under an always-mapped black
-      # transition shield. The layer surface remains alpha-capable so Hyprland
-      # keeps scheduling the covered client; only after this bounded prime do
-      # we bind ScreencopyView to the token-matched toplevel.
+      if not source_geometry_ready(window):
+        # ScreencopyView exports the toplevel at its own size, and a
+        # monitor-sized software SHM export distorts. Capture only the checked
+        # floating 640x480 source; the guard scales it across the output.
+        if staged_at is None or now - staged_at >= .5:
+          amiga.stage_capture_source(window['address'])
+          staged_at = now
+      else:
+        amiga.focus_window(window['address'])
+        if amiga.ipc('amigaPresent', owner, monitor, appid, demo['title']) != 'ok':
+          raise InterruptedError('Guard refused presentation staging')
+        time.sleep(.15)
+        if amiga.ipc('amigaCommit', owner) != 'ok':
+          raise InterruptedError('Guard refused presentation commit')
+        shown = True
+        print('Amiga presented: ' + demo.get('task_id', '?') + ' ' + demo.get('title', ''), flush=True)
+    if shown and not direct and status.get('captureFailed'):
+      # The compositor rejected toplevel capture. Present the client itself,
+      # fullscreen under the guard, and let the guard reveal it only after the
+      # compositor confirms that state.
       amiga.fullscreen_window(window['address'])
-      if amiga.ipc('amigaPresent', owner, monitor, appid, demo['title']) != 'ok':
-        raise InterruptedError('Guard refused presentation staging')
-      amiga.fullscreen_window(window['address'])
-      time.sleep(.15)
-      if amiga.ipc('amigaCommit', owner) != 'ok':
-        raise InterruptedError('Guard refused presentation commit')
-      shown = True
-      print('Amiga presented: ' + demo.get('task_id', '?') + ' ' + demo.get('title', ''), flush=True)
+      if amiga.ipc('amigaDirect', owner) != 'ok':
+        raise InterruptedError('Guard refused direct presentation')
+      direct = True
+      print('Amiga direct presentation: capture unavailable', flush=True)
     if shown and playing_since is None and status.get('frameReady'):
       playing_since = now
     if shown and revision != status.get('audioRevision') and audio.find() is not None:
