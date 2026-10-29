@@ -364,6 +364,40 @@ class NativeTest(unittest.TestCase):
         state.play(process, {'title': 'Fixture'}, token, 'TEST', amiga.APP_CLASS + '.' + token,
                    type('Log', (), {'name': str(log)})(), Mock(), 0)
 
+  def test_demo_duration_counts_from_the_first_revealed_frame(self):
+    import contextlib
+    from unittest.mock import Mock, patch
+    import state
+    token = 'a' * 32
+    protocol = ''.join(f'OMARCHY_FRAME_V1 {token} {event}\n' for event in
+                       ('protocol 1', 'restored 1', 'frame 1 7 640 480 0123456789abcdef'))
+    clock = [0.0]
+    with tempfile.TemporaryDirectory() as tmp, contextlib.ExitStack() as stack:
+      log = Path(tmp) / 'owned.log'
+      log.write_text(protocol)
+      def ipc(method, *args):
+        if method == 'amigaPoll':
+          # The saved state takes 30 seconds to reach a revealed frame.
+          return json.dumps({'state': 'active', 'audioRevision': 0, 'requestedMuted': True,
+                             'frameReady': clock[0] >= 30})
+        return 'ok'
+      def sleep(seconds):
+        clock[0] += 1
+      stack.enter_context(patch.object(amiga, 'ipc', side_effect=ipc))
+      stack.enter_context(patch.object(state, 'owned_window', return_value={'floating': True, 'size': [640, 480], 'address': '0xabc'}))
+      stack.enter_context(patch.object(amiga, 'fullscreen_window'))
+      stack.enter_context(patch.object(state.subprocess, 'run'))
+      stack.enter_context(patch.object(state.time, 'monotonic', side_effect=lambda: clock[0]))
+      stack.enter_context(patch.object(state.time, 'sleep', side_effect=sleep))
+      audio = stack.enter_context(patch.object(state, 'OwnedAudio'))
+      audio.return_value.find.return_value = object()
+      audio.return_value.apply.return_value = {'mute': True}
+      process = Mock()
+      process.poll.return_value = None
+      self.assertEqual(state.play(process, {'title': 'Fixture'}, token, 'TEST', amiga.APP_CLASS + '.' + token,
+                                  type('Log', (), {'name': str(log)})(), Mock(), 0, timeout=10), (0, 'timeout'))
+      self.assertGreaterEqual(clock[0], 40)
+
   def test_disappeared_owned_window_recovers_when_bwrap_is_still_alive(self):
     import contextlib
     from unittest.mock import Mock, patch

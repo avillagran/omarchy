@@ -185,10 +185,14 @@ def sandbox_command(demo, temporary, token):
 
 def play(process, demo, owner, monitor, appid, log, history, handled, timeout=None):
   start, shown, revision = time.monotonic(), False, None
+  # The startup deadline runs from launch; the demo's own duration runs only
+  # from the first revealed frame, so a slow restore never shortens playback.
+  playing_since = None
   timeout = demo_timeout(demo) if timeout is None else timeout
   audio = OwnedAudio(appid, os.environ)
   while True:
-    elapsed = time.monotonic() - start
+    now = time.monotonic()
+    elapsed = now - start
     status = json.loads(amiga.ipc('amigaPoll', owner))
     if status.get('state') != 'active':
       if status.get('reason') == 'locked' and not desktop_locked():
@@ -225,6 +229,8 @@ def play(process, demo, owner, monitor, appid, log, history, handled, timeout=No
         raise InterruptedError('Guard refused presentation commit')
       shown = True
       print('Amiga presented: ' + demo.get('task_id', '?') + ' ' + demo.get('title', ''), flush=True)
+    if shown and playing_since is None and status.get('frameReady'):
+      playing_since = now
     if shown and revision != status.get('audioRevision') and audio.find() is not None:
       actual = audio.apply(status['requestedMuted'])
       if actual is None:
@@ -233,7 +239,7 @@ def play(process, demo, owner, monitor, appid, log, history, handled, timeout=No
         revision = status['audioRevision']
     if elapsed > PRESENTATION_STARTUP_DEADLINE_SECONDS and (not shown or not status.get('frameReady') or revision is None):
       raise ValueError('Restored frame/audio startup deadline exceeded')
-    if shown and elapsed >= timeout:
+    if playing_since is not None and now - playing_since >= timeout:
       return handled, 'timeout'
     time.sleep(.1)
 
