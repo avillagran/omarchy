@@ -80,7 +80,6 @@ BorderSurface {
   readonly property bool hot: mouseArea.containsMouse || hasCursor
   readonly property bool _showFocusRing: focusable && activeFocus
   readonly property color _selectedColor: Style.selectedStateColor(root.foreground, root.accent)
-  readonly property var _tooltipBorderSpec: Border.localOrSurfaceSpec("tooltip", "border", root.tooltipBorder, Commons.Color.tooltip.border, Math.max(1, Style.normalBorderWidth))
   readonly property var _focusBorderSpec: Border.controlSpec("focus", root.foreground, root.accent)
   readonly property var _hoverBorderSpec: Border.controlSpec("hover-cursor", root.foreground, root.accent)
   readonly property var _selectedBorderSpec: Border.controlSpec("selected", root.foreground, root.accent)
