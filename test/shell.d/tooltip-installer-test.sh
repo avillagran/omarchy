@@ -15,9 +15,8 @@ with tempfile.TemporaryDirectory(prefix='tooltip-installer-test.') as temp:
     (source/'shell').mkdir(parents=True)
     (source/'default').mkdir()
     fake = base/'bin'
-    write(fake/'bash', '''#!/bin/bash
-if [[ $1 == -c && $2 == *'/etc/omarchy.conf'* ]]; then cat "$TEST_SELECTION"; else exec /bin/bash "$@"; fi
-''')
+    def configured(path):
+        return f'export OMARCHY_PATH="{path}"\n'
     write(fake/'omarchy-pkg-add' , '#!/bin/bash\nexit 0\n')
     write(fake/'pacman', '''#!/bin/bash
 if [[ $1 == -Q ]]; then echo 'quickshell 0.3.1-1'; exit 0; fi
@@ -35,15 +34,20 @@ if [[ ${1:-} == --packagelist ]]; then printf '%s/new.pkg.tar\\n' "$PWD"; else t
     write(source/'bin/omarchy-dev-link', '''#!/bin/bash
 printf 'link %s\\n' "$1" >> "$TEST_LOG"
 if [[ $1 == */trial/omarchy && $FAULT == link ]]; then exit 44; fi
-printf '%s' "$1" > "$TEST_SELECTION"
+printf 'export OMARCHY_PATH="%s"\\n' "$1" > "$TEST_SELECTION"
+''')
+    write(source/'bin/omarchy-dev-unlink', '''#!/bin/bash
+printf 'unlink\\n' >> "$TEST_LOG"
+printf 'export OMARCHY_PATH="/usr/share/omarchy"\\n' > "$TEST_SELECTION"
 ''')
     write(source/'default/tooltips/check-runtime', '#!/bin/bash\nexit 0\n')
     write(source/'default/tooltips/build-runtime', '#!/bin/bash\nmkdir -p "$TOOLTIP_BUILD_DIR/build/src"\ntouch "$TOOLTIP_BUILD_DIR/build/src/quickshell"\n')
-    write(source/'default/tooltips/prepare-trial.py', '''import argparse
+    write(source/'default/tooltips/prepare-trial.py', '''import argparse, os
 from pathlib import Path
 p=argparse.ArgumentParser()
 for name in ['source','installed','stock-package','output','runtime']: p.add_argument('--'+name)
 a=p.parse_args(); t=Path(a.output)
+open(os.environ['TEST_LOG'],'a').write('installed '+a.installed+'\\n')
 for d in ['backup','package','omarchy/shell','omarchy/test/shell.d']: (t/d).mkdir(parents=True,exist_ok=True)
 (t/'omarchy/test/shell.d/tooltips-test.sh').write_text('exit 0\\n')
 ''')
@@ -55,11 +59,11 @@ for d in ['backup','package','omarchy/shell','omarchy/test/shell.d']: (t/d).mkdi
         selected=work/'selected'
         (selected/'shell').mkdir(parents=True)
         selection=work/'selection'
-        selection.write_text(str(selected))
+        selection.write_text(configured(selected))
         env={**os.environ, 'PATH':str(fake)+':'+os.environ['PATH'], 'HOME':str(work),
              'XDG_STATE_HOME':str(work/'state'), 'XDG_DATA_HOME':str(work/'data'),
              'XDG_CACHE_HOME':str(work/'cache'), 'XDG_CONFIG_HOME':str(work/'config'),
-             'OMARCHY_PATH':str(source), 'TEST_SELECTION':str(selection), 'FAULT':fault, 'TEST_LOG':str(work/'log')}
+             'OMARCHY_PATH':str(source), 'TEST_SELECTION':str(selection), 'TOOLTIP_OMARCHY_CONF':str(selection), 'FAULT':fault, 'TEST_LOG':str(work/'log')}
         run=subprocess.run(['/bin/bash',str(root/'default/tooltips/install'),'--base',str(source)],env=env,capture_output=True,text=True)
         state=work/'state/omarchy/tooltip-trial.json'
         pending=state.with_name(state.name+'.pending')
@@ -73,11 +77,39 @@ for d in ['backup','package','omarchy/shell','omarchy/test/shell.d']: (t/d).mkdi
             assert pathlib.Path(saved['previousPackage']).exists()
             undone=subprocess.run(['/bin/bash',str(root/'default/tooltips/install'),'--uninstall'],env=env,capture_output=True,text=True)
             assert undone.returncode==0,(undone.stdout,undone.stderr)
-            assert selection.read_text()==str(selected)
+            assert selection.read_text()==configured(selected)
             assert not state.exists()
         else:
             assert 'previous.pkg.tar' in log, (fault,log)
             if fault=='link': assert f'link {selected}' in log, log
             if fault.startswith('package'): assert 'link ' not in log, log
         print('ok - tooltip installer transaction: '+fault)
+
+    # A package installation has no /etc/omarchy.conf. The caller's OMARCHY_PATH
+    # must not turn the feature checkout into the copy source or rollback target.
+    work=base/'unconfigured'
+    stock=work/'cache/omarchy/tooltips/stock/quickshell-0.3.1-1-any.pkg.tar.xz'
+    stock.parent.mkdir(parents=True)
+    stock.touch()
+    selection=work/'selection'
+    env={**os.environ, 'PATH':str(fake)+':'+os.environ['PATH'], 'HOME':str(work),
+         'XDG_STATE_HOME':str(work/'state'), 'XDG_DATA_HOME':str(work/'data'),
+         'XDG_CACHE_HOME':str(work/'cache'), 'XDG_CONFIG_HOME':str(work/'config'),
+         'OMARCHY_PATH':str(source), 'TEST_SELECTION':str(selection), 'TOOLTIP_OMARCHY_CONF':str(selection),
+         'FAULT':'none', 'TEST_LOG':str(work/'log')}
+    run=subprocess.run(['/bin/bash',str(root/'default/tooltips/install')],env=env,capture_output=True,text=True)
+    if pathlib.Path('/usr/share/omarchy/shell').is_dir():
+        assert run.returncode==0,(run.stdout,run.stderr)
+        log=(work/'log').read_text()
+        assert 'installed /usr/share/omarchy\n' in log, log
+        saved=json.loads((work/'state/omarchy/tooltip-trial.json').read_text())
+        assert saved['previousOmarchy']=='/usr/share/omarchy',saved
+        undone=subprocess.run(['/bin/bash',str(root/'default/tooltips/install'),'--uninstall'],env=env,capture_output=True,text=True)
+        assert undone.returncode==0,(undone.stdout,undone.stderr)
+        assert selection.read_text()==configured('/usr/share/omarchy')
+        assert 'unlink\n' in (work/'log').read_text()
+    else:
+        assert run.returncode!=0 and 'Invalid selected Omarchy tree: /usr/share/omarchy' in run.stderr,(run.stdout,run.stderr)
+        assert not (work/'log').exists() or 'installed ' not in (work/'log').read_text()
+    print('ok - tooltip installer uses the package tree without /etc/omarchy.conf')
 PY

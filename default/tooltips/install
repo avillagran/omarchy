@@ -41,7 +41,22 @@ restore_selection() {
     bash "$source_root/bin/omarchy-dev-link" "$1" --no-reboot
   fi
 }
-selected_root=$(bash -c '. /etc/omarchy.conf; printf "%s" "$OMARCHY_PATH"')
+# The selection is what /etc/omarchy.conf names, or the package tree when it is
+# absent. Never inherit the caller's OMARCHY_PATH, which may name this checkout.
+configured_selection() {
+  local conf=${TOOLTIP_OMARCHY_CONF:-/etc/omarchy.conf}
+  if [[ -f $conf ]]; then
+    (
+      OMARCHY_PATH=
+      # shellcheck disable=SC1090
+      . "$conf"
+      printf '%s' "$OMARCHY_PATH"
+    )
+  else
+    printf '%s' /usr/share/omarchy
+  fi
+}
+selected_root=$(configured_selection)
 [[ -d $selected_root/shell ]] || { echo "Invalid selected Omarchy tree: $selected_root" >&2; exit 1; }
 if [[ -z $base_root ]]; then
   base_root=$selected_root
@@ -52,7 +67,7 @@ if (( remove )); then
   selected=$(read_state trialOmarchy)
   package=$(read_state previousPackage)
   # Do not overwrite a dev link changed by another development task.
-  configured=$(bash -c '. /etc/omarchy.conf; printf "%s" "$OMARCHY_PATH"')
+  configured=$(configured_selection)
   [[ $configured == "$selected" ]] || { echo "Omarchy selection changed after this trial; review before uninstalling." >&2; exit 1; }
   [[ -f $package ]] || { echo "Rollback package missing: $package" >&2; exit 1; }
   sudo pacman -U --noconfirm "$package"
@@ -63,7 +78,7 @@ if (( remove )); then
 fi
 
 if [[ -f $state_file ]]; then
-  configured=$(bash -c '. /etc/omarchy.conf; printf "%s" "$OMARCHY_PATH"')
+  configured=$(configured_selection)
   if [[ $configured == "$(read_state trialOmarchy)" ]]; then
     echo "The tooltip trial is already installed. Uninstall it before selecting a newer trial."
     exit 0
