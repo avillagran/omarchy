@@ -172,29 +172,6 @@ QtObject {
     return _lookupPlural(count, singular, plural, { args: args })
   }
 
-  // What the Ui kit calls for a label it renders. Text the keyed catalog
-  // already produced for this language (a first-party I18n.t() result) is
-  // shown as is: it is in the display language already, and looking it up
-  // again as an English source could turn it into a different word.
-  // Everything else goes through tr().
-  readonly property var _keyedValues: {
-    var values = Object.create(null)
-    if (root.candidates.length === 0) return values
-    for (var key in root.languageStrings) {
-      var value = root.languageStrings[key]
-      if (typeof value === "string") values[value] = true
-      else if (value && typeof value === "object")
-        for (var form in value) if (typeof value[form] === "string") values[value[form]] = true
-    }
-    return values
-  }
-
-  function label(text) {
-    var source = String(text === undefined || text === null ? "" : text)
-    if (source === "" || root._keyedValues[source] === true) return source
-    return root.tr(source)
-  }
-
   // Marks a string for extraction without translating it, for strings
   // defined away from where they are shown (a model returning a status).
   function noop(source) {

@@ -21,10 +21,10 @@ import qs.Commons as Commons
 BorderSurface {
   id: root
 
-  // Labels are translated by their English source string (I18n.label), so
+  // Labels are translated by their English source string (I18n.tr), so
   // a plugin's text follows the picked language without code changes. Set
-  // false for user or machine text (a device or host name, an email) that
-  // must show exactly as given.
+  // false for user or machine text (a device or host name, an email), or
+  // text the caller already translated, that must show exactly as given.
   property bool translate: true
   property string text: ""
   property string iconText: ""
@@ -155,7 +155,7 @@ BorderSurface {
 
   ToolTip {
     visible: root.tooltipText !== "" && mouseArea.containsMouse
-    text: root.translate ? I18n.label(root.tooltipText) : root.tooltipText
+    text: root.translate ? I18n.tr(root.tooltipText) : root.tooltipText
     delay: 400
     padding: 0
     background: BorderSurface {
@@ -165,7 +165,7 @@ BorderSurface {
     }
     contentItem: Text {
       textFormat: Text.PlainText
-      text: root.translate ? I18n.label(root.tooltipText) : root.tooltipText
+      text: root.translate ? I18n.tr(root.tooltipText) : root.tooltipText
       color: root.tooltipForeground
       font.family: root.fontFamily
       font.pixelSize: Style.font.bodySmall
@@ -209,7 +209,7 @@ BorderSurface {
       id: label
       textFormat: Text.PlainText
       visible: root.text !== ""
-      text: root.translate ? I18n.label(root.text) : root.text
+      text: root.translate ? I18n.tr(root.text) : root.text
       color: root.selected ? root._selectedColor : root.foreground
       font.family: root.fontFamily
       font.pixelSize: root.fontSize

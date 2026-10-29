@@ -29,10 +29,10 @@ BorderSurface {
   id: root
 
   property string iconText: ""
-  // Labels are translated by their English source string (I18n.label), so
+  // Labels are translated by their English source string (I18n.tr), so
   // a plugin's text follows the picked language without code changes. Set
-  // false for user or machine text (a device or host name, an email) that
-  // must show exactly as given.
+  // false for user or machine text (a device or host name, an email), or
+  // text the caller already translated, that must show exactly as given.
   property bool translate: true
   property string tooltipText: ""
   property color foreground: Commons.Color.foreground
