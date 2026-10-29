@@ -1263,9 +1263,11 @@ Item {
       var shown = displayModel.get(j)
       if (shown.kind !== "query" || shown.itemId !== itemId) continue
       if (filled) {
-        // Keep the section the row was placed with (a lone fallback has none).
-        filled.section = shown.section
-        displayModel.set(j, filled)
+        // Show it in the section it was placed with (a lone fallback has
+        // none), leaving the stored row's own section for later rebuilds.
+        var display = Object.assign({}, filled)
+        display.section = shown.section
+        displayModel.set(j, display)
       } else {
         displayModel.remove(j)
         if (j < root.selectedIndex) root.selectedIndex -= 1
