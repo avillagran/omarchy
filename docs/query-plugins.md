@@ -1,13 +1,13 @@
 # Live query plugins for the Omarchy menu
 
-This adds an **extensible plugin system** that surfaces Alfred/Raycast-style inline results in the Omarchy launcher (`omarchy.menu`). Type into the search box and registered plugins run a command and insert a result row — below the normal search matches, in a **Results** section (at the top whenever nothing else matches) — as you type. Press Enter to act on the top result.
+This adds an **extensible plugin system** that surfaces Alfred/Raycast-style inline results in the Omarchy launcher (`omarchy.menu`). Type into the search box and registered plugins run a command and insert a result row as you type. Calculator and keyword plugin results sit above the normal search matches, so Enter acts on them; the web search fallback sits below the matches (at the top whenever nothing else matches).
 
 It ships with two built-in plugins (Calculator and Web search). **Anyone can add their own plugins** without touching the source: drop a JSON file in their config and the menu picks it up live (hot-reloaded, no restart).
 
 ## Shipped plugins
 
 - **Calculator** (`omarchy.query.calc`) — type an expression (`2+2`, `sqrt(9)`, `pi*2`, `2^10`) and the result appears as `2+2 = 4`. Enter copies the bare result (`4`) to the clipboard and closes the menu.
-- **Web search** (`omarchy.query.web`) — offered as a fallback for every query, including arithmetic (it sits one arrow-down below the calculator result). Enter opens it in your default browser as a web app. Bare `http(s)://` URLs pass straight through, so Enter opens the URL itself. Providers: `google` (default), `duckduckgo`, `bing`, `amazon`, `youtube`, `github`, `wikipedia` — e.g. `youtube omarchy` searches YouTube.
+- **Web search** (`omarchy.query.web`) — offered as a fallback for every query, including arithmetic, below the search matches. Enter opens it in your default browser as a web app. Bare `http(s)://` URLs pass straight through, so Enter opens the URL itself. Providers: `google` (default), `duckduckgo`, `bing`, `amazon`, `youtube`, `github`, `wikipedia` — e.g. `youtube omarchy` searches YouTube.
 
 ## Writing your own plugin
 
@@ -22,19 +22,22 @@ Plugins live in `~/.config/omarchy/query-plugins.json` (a JSON array). The menu 
 | `label` | Fallback display name. |
 | `i18n` | `{ "en": "...", "es": "..." }` localized names. |
 | `icon` | One of: a bundled key (`calc`, `search`); an absolute/relative **path** to an image (`/home/you/icons/foo.svg`, `~/icons/foo.png`); or a Nerd Font **glyph** (`󰅌`). Paths/images always render; glyphs depend on the active font. |
-| `command` | Executable to run; the typed query is passed as its only argument. Built-in plugins resolve this under `$OMARCHY_PATH/bin`; user plugins run it exactly as configured — an absolute path, or a name resolved through `PATH`. |
-| `action` | `copy` copies the result to the clipboard; `run` executes the command on Enter (for `web` plugins, Enter opens the resolved URL in a browser web-app instead). |
-| `keyword` | For `copy`/`run`/`snippet`: only fire when the query starts with this prefix. |
+| `command` | Executable to run; the whole typed query (keyword included) is passed as its only argument. Built-in plugins resolve this under `$OMARCHY_PATH/bin`; user plugins run it exactly as configured — an absolute path, or a name resolved through `PATH`. |
+| `args` | `url` passes `--print` before the query, for commands such as `omarchy-query-web` that print a URL instead of opening it. Omit it otherwise. |
+| `action` | `copy` copies the result to the clipboard; `run` executes the command again on Enter. A `web` plugin's command prints a URL, and Enter opens that URL in a browser web app. |
+| `keyword` | Only fire when the query starts with this prefix. Required for `copy`/`run`/`snippet`; optional for `web`. |
 | `enabled` | `false` disables the plugin. |
-| `language` | `en` or `es`; language of the result's detail text. |
+| `language` | Language used for `i18n` and the row's detail text (`en` or `es`); defaults to the menu's language, falling back to English. |
 
 `kind` firing rules:
 
 - `math` → only when the query looks like arithmetic (has a digit + operator/`.`/parens).
-- `web` → always, as the fallback (including for arithmetic and bare URLs).
+- `web` → always, as the fallback (including for arithmetic and bare URLs); with a `keyword`, only when the query starts with it.
 - `copy`/`run`/`snippet` → only when the query starts with `keyword`.
 
-Result rows are ranked math first, keyword plugins next, web last, so the calculator result is the default and search is one arrow-down away.
+Math and keyword plugin rows go above the search matches (math first), and web rows go below them, so the calculator result is the default and search never displaces a matching app or menu entry.
+
+Each row shows dimmed until its command answers. A command that exits non-zero, prints nothing, prints `Error`, or runs longer than five seconds drops its row.
 
 ### Example: a currency converter (run)
 
@@ -73,9 +76,9 @@ Typing `usd 100 eur` runs `my-currency-cli "usd 100 eur"` and shows the result; 
 ]
 ```
 
-Typing `> hello` shows `hello` with the localized plugin name as its detail; Enter copies `hello`.
+Typing `> hello` shows `> hello` with the localized plugin name as its detail; Enter copies `> hello`. The command receives the whole query, keyword included, so a real plugin strips the keyword itself.
 
-### Example: a translator (web-style)
+### Example: a translator (web)
 
 ```json
 [
@@ -85,13 +88,14 @@ Typing `> hello` shows `hello` with the localized plugin name as its detail; Ent
     "label": "Translate",
     "i18n": { "en": "Translate", "es": "Traducir" },
     "icon": "search",
-    "command": "omarchy-query-web",
-    "args": "url",
+    "command": "my-translate-url",
     "action": "run",
     "keyword": "tr "
   }
 ]
 ```
+
+Typing `tr hola` runs `my-translate-url "tr hola"`, which prints a translation URL; the row reads `Translate: tr hola`, and Enter opens the URL.
 
 ## Per-plugin preferences
 
