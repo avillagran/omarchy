@@ -13,23 +13,23 @@ amiga_message() {
   locale=${locale%%.*}
   locale=${locale%%_*}
   case "$locale:$key" in
-  es:unsupported) printf '%s\n' "Amiga: arquitectura no compatible: $(uname -m)." >&2 ;;
+  es:unsupported) printf '%s\n' "Amiga: arquitectura no compatible." >&2 ;;
   es:unavailable) printf '%s\n' "Amiga: el paquete omarchy-amiga todavía no está publicado para esta arquitectura." >&2 ;;
   es:install) printf '%s\n' "Amiga: no se pudo instalar omarchy-amiga; se conservó la selección anterior." >&2 ;;
   es:verify) printf '%s\n' "Amiga: falló la verificación del runtime o del paquete Top; se conservó la selección anterior." >&2 ;;
-  fr:unsupported) printf '%s\n' "Amiga : architecture non prise en charge : $(uname -m)." >&2 ;;
+  fr:unsupported) printf '%s\n' "Amiga : architecture non prise en charge ." >&2 ;;
   fr:unavailable) printf '%s\n' "Amiga : le paquet omarchy-amiga n'est pas encore publié pour cette architecture." >&2 ;;
   fr:install) printf '%s\n' "Amiga : l'installation de omarchy-amiga a échoué ; la sélection précédente est conservée." >&2 ;;
   fr:verify) printf '%s\n' "Amiga : la vérification du runtime ou du pack Top a échoué ; la sélection précédente est conservée." >&2 ;;
-  de:unsupported) printf '%s\n' "Amiga: nicht unterstützte Architektur: $(uname -m)." >&2 ;;
+  de:unsupported) printf '%s\n' "Amiga: nicht unterstützte Architektur." >&2 ;;
   de:unavailable) printf '%s\n' "Amiga: Das Paket omarchy-amiga ist für diese Architektur noch nicht veröffentlicht." >&2 ;;
   de:install) printf '%s\n' "Amiga: omarchy-amiga konnte nicht installiert werden; die vorherige Auswahl bleibt erhalten." >&2 ;;
   de:verify) printf '%s\n' "Amiga: Runtime- oder Top-Paket-Verifizierung fehlgeschlagen; die vorherige Auswahl bleibt erhalten." >&2 ;;
-  ru:unsupported) printf '%s\n' "Amiga: неподдерживаемая архитектура: $(uname -m)." >&2 ;;
+  ru:unsupported) printf '%s\n' "Amiga: неподдерживаемая архитектура." >&2 ;;
   ru:unavailable) printf '%s\n' "Amiga: пакет omarchy-amiga ещё не опубликован для этой архитектуры." >&2 ;;
   ru:install) printf '%s\n' "Amiga: не удалось установить omarchy-amiga; предыдущий выбор сохранён." >&2 ;;
   ru:verify) printf '%s\n' "Amiga: проверка среды или пакета Top завершилась ошибкой; предыдущий выбор сохранён." >&2 ;;
-  *:unsupported) printf '%s\n' "Amiga: unsupported architecture: $(uname -m)." >&2 ;;
+  *:unsupported) printf '%s\n' "Amiga: unsupported architecture." >&2 ;;
   *:unavailable) printf '%s\n' "Amiga: omarchy-amiga is not published for this architecture yet." >&2 ;;
   *:install) printf '%s\n' "Amiga: omarchy-amiga installation failed; the previous selection was preserved." >&2 ;;
   *:verify) printf '%s\n' "Amiga: runtime or Top pack verification failed; the previous selection was preserved." >&2 ;;
@@ -64,13 +64,10 @@ default | text | amiga)
         # opens the interactive package transaction, which rechecks internally.
         exec omarchy-launch-floating-terminal-with-presentation 'omarchy-setup-screensaver amiga --install'
       fi
-      case "$(uname -m)" in
-      x86_64 | aarch64 | arm64) ;;
-      *)
+      if ! omarchy-hw-x86 && ! omarchy-hw-aarch64; then
         amiga_message unsupported
         exit 1
-        ;;
-      esac
+      fi
       if [[ ${2:-} == "--pack" && -n ${3:-} && $# == 3 ]]; then
         # Explicit development seam for a reviewed local Top archive. Production
         # installation is the single omarchy-amiga package contract below.
