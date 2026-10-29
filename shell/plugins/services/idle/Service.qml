@@ -433,22 +433,18 @@ Item {
   ShellIpc {
     target: "idle"
 
-    function amigaLocale(): string {
-      return JSON.stringify({ LANGUAGE: Quickshell.env("LANGUAGE"), LC_ALL: Quickshell.env("LC_ALL"), LC_MESSAGES: Quickshell.env("LC_MESSAGES"), LANG: Quickshell.env("LANG") })
-    }
-
     function amigaRuntime(userPrefix: bool): string {
       var directory = userPrefix ? root.home + "/.local/lib" : "/usr/lib"
       return amigaScreensaver.configure("file://" + directory + "/omarchy-amiga-runtime/guard/Guard.qml")
     }
 
-    function amigaBegin(owner: string, monitor: string, hintOn: string, hintOff: string): string {
+    function amigaBegin(owner: string, monitor: string): string {
       root.watchAmiga()
       if (!root.lockStatusAllowsAmiga()) {
         root.refreshLockStatus()
         return "locked"
       }
-      return amigaScreensaver.begin(owner, monitor, hintOn, hintOff)
+      return amigaScreensaver.begin(owner, monitor, I18n.t("screensaver.amigaAudioOn"), I18n.t("screensaver.amigaAudioOff"))
     }
 
     function amigaPoll(owner: string): string {

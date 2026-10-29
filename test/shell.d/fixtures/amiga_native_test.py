@@ -74,11 +74,11 @@ class NativeTest(unittest.TestCase):
     import state
     responses = iter(['preparing', 'input-unavailable', 'ok'])
     with patch.object(amiga, 'ipc', side_effect=lambda *args: next(responses)), patch.object(state.time, 'sleep'):
-      owner = state.begin_guard('TEST', ('on', 'off'))
+      owner = state.begin_guard('TEST')
     self.assertRegex(owner, r'^[a-f0-9]{32}$')
     with patch.object(amiga, 'ipc', return_value='locked'), patch.object(state.time, 'sleep') as sleep:
       with self.assertRaisesRegex(InterruptedError, 'locked'):
-        state.begin_guard('TEST', ('on', 'off'))
+        state.begin_guard('TEST')
       self.assertEqual(sleep.call_count, 40)
 
   def test_canonical_lock_read_fails_closed(self):
@@ -136,13 +136,6 @@ class NativeTest(unittest.TestCase):
     self.assertFalse(amiga.source_geometry_ready(dict(floating=False, size=[640, 480])))
     self.assertFalse(amiga.source_geometry_ready(dict(floating=True, size=[853, 533])))
     self.assertTrue(amiga.source_geometry_ready(dict(floating=True, size=[640, 480])))
-
-  def test_localized_hints_follow_desktop_locale(self):
-    from audio import hint_labels
-    self.assertEqual(hint_labels({'LANG': 'es_CL.UTF-8'})[0], 'M = Activar audio')
-    self.assertEqual(hint_labels({'LANG': 'es', 'LANGUAGE': 'en'})[0], 'M = Turn On Audio')
-    self.assertEqual(hint_labels({'LANG': 'es', 'LC_ALL': 'C'})[1], 'M = Turn Off Audio')
-    self.assertEqual(hint_labels({'LANG': 'fr_FR.UTF-8'})[0], 'M = Activer le son')
 
   def test_audio_only_mutates_owned_stream_and_rejects_unsafe_gain(self):
     from audio import OwnedAudio
@@ -321,7 +314,7 @@ class NativeTest(unittest.TestCase):
       stack.enter_context(patch.object(amiga, 'hypr', return_value=[{'name': 'TEST', 'focused': True}]))
       def ipc(method, *args):
         events.append(method)
-        return '{}' if method == 'amigaLocale' else 'ok'
+        return 'ok'
       stack.enter_context(patch.object(amiga, 'ipc', side_effect=ipc))
       def command(demo, temporary, token):
         tokens.append(token)
@@ -364,7 +357,7 @@ class NativeTest(unittest.TestCase):
         events = []
         def ipc(method, *args):
           events.append(method)
-          return '{}' if method == 'amigaLocale' else 'ok'
+          return 'ok'
         stack.enter_context(patch.object(amiga, 'ipc', side_effect=ipc))
         def command(demo, temporary, token):
           (Path(temporary) / 'renderer.json').write_text('{}')

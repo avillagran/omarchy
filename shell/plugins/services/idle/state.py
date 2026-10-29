@@ -17,7 +17,7 @@ import amiga
 import pack
 import renderer
 import runtime as runtime_integrity
-from audio import OwnedAudio, hint_labels
+from audio import OwnedAudio
 from amiga import owned_window, source_geometry_ready
 from history import History
 
@@ -66,12 +66,12 @@ def demo_timeout(demo, environment=None):
   return min(duration, maximum) if duration is not None else maximum
 
 
-def begin_guard(monitor, labels):
+def begin_guard(monitor):
   """Open a fresh guard only while the desktop reports an unlocked session."""
   owner = uuid.uuid4().hex
   last_result = 'unavailable'
   for attempt in range(40):
-    result = amiga.ipc('amigaBegin', owner, monitor, *labels)
+    result = amiga.ipc('amigaBegin', owner, monitor)
     last_result = result
     if result == 'ok':
       return owner
@@ -273,8 +273,7 @@ def run():
     begun = False
     owner = ''
     try:
-      labels = hint_labels(json.loads(amiga.ipc('amigaLocale')))
-      owner = begin_guard(monitor, labels)
+      owner = begin_guard(monitor)
       begun = True
       previous = None
       session = logdir / 'session.json'
@@ -309,7 +308,7 @@ def run():
                 # candidate; begin_guard fails closed if the real lock engaged.
                 with contextlib.suppress(Exception):
                   amiga.ipc('amigaEnd', owner)
-                owner = begin_guard(monitor, labels)
+                owner = begin_guard(monitor)
             finally:
               amiga.stop(process)
         if failure is not None:

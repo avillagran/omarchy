@@ -107,6 +107,7 @@ let clock = 10000
 let dismissals = 0
 const lockState = {
   Date: { now: () => clock },
+  I18n: { t: key => key },
   lockActive: true, lockCheckedAt: 0, lockProbeStartedAt: 0, lockStatusMaxAge: 1000,
   amigaWatching: false, amigaTouchedAt: 0, amigaWatchGrace: 5000,
   lockStatusProbe: { running: false },

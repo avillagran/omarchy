@@ -29,8 +29,7 @@ install(FILES ${CMAKE_CURRENT_BINARY_DIR}/qmldir DESTINATION ${RUNTIME}/guard/Am
 install(FILES guard/Guard.qml DESTINATION ${RUNTIME}/guard)
 install(FILES ../../shell/plugins/services/idle/state.py ../../shell/plugins/services/idle/pack.py
   ../../shell/plugins/services/idle/renderer.py ../../shell/plugins/services/idle/runtime.py ../../shell/plugins/services/idle/history.py ../../shell/plugins/services/idle/amiga.py
-  ../../shell/plugins/services/idle/audio.py
-  ../../shell/plugins/services/idle/i18n.json DESTINATION ${RUNTIME}/controller)
+  ../../shell/plugins/services/idle/audio.py DESTINATION ${RUNTIME}/controller)
 # The private OpenAL is deliberately linked to Pulse; dlopen bypasses our hook.
 if(NOT OPENAL_SOURCE)
   message(FATAL_ERROR "Set OPENAL_SOURCE to the pinned OpenAL Soft source checkout")
