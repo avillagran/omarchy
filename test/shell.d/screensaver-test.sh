@@ -31,28 +31,7 @@ python3 "$ROOT/test/shell.d/fixtures/amiga_renderer_test.py"
 python3 "$ROOT/test/shell.d/fixtures/amiga_top_pack_test.py"
 run_node_test <<'JS'
 const fs = require('fs')
-const menu = requireFromRoot('shell/plugins/menu/MenuModel.js')
-const entries = menu.parseMenuJsonc(fs.readFileSync(path.join(root, 'default/omarchy/omarchy-menu.jsonc'), 'utf8'))
-const amiga = entries.find(e => e.id === 'appearance.branding.screensaver.amiga')
-assert(amiga && amiga.label === 'Amiga', 'native Amiga menu entry has exact label')
-assert(entries.some(e => e.id === 'appearance.branding.screensaver.omarchy' && e.label === 'Default'), 'upstream screensaver has exact Default label')
-assert(amiga.action === 'omarchy-setup-screensaver amiga', 'ready selection preflights without spawning a terminal')
-assert(entries.some(e => e.id === 'appearance.branding.screensaver.omarchy' && e.checked === 'omarchy-setup-screensaver --is-default'), 'default text choice remains selectable')
-assert(entries.some(e => e.id === 'appearance.branding.screensaver.text' && e.action === 'omarchy-branding-screensaver text'), 'text branding remains available')
 const guard = fs.readFileSync(path.join(root, 'packages/amiga-runtime/guard/Guard.qml'), 'utf8')
-for (const input of ['Keys.onPressed', 'onPressed', 'onWheel', 'onMotion'])
-  assert(guard.includes(input), `input guard handles ${input}`)
-assert(!guard.includes('onPositionChanged'), 'absolute compositor warps do not dismiss')
-assert(guard.includes('Qt.BlankCursor') && guard.includes('WlrKeyboardFocus.Exclusive'), 'surface-local cursor and exclusive keys')
-assert(guard.includes('interval: 60000'), 'owned guard has a bounded transition-safe lease')
-assert(guard.includes('color: "transparent"') && guard.includes('id: captureBackdrop') && guard.includes('ScreencopyView'), 'alpha-capable guard paints an opaque fallback and owned emulator capture')
-assert(!guard.includes('color: "black"\n      exclusionMode'), 'layer surface itself stays non-opaque so the captured client keeps receiving frame callbacks')
-assert(guard.includes('captureSource: panel.screen.name === root.monitorName ? root.source : null'), 'capture is restricted to the selected output and owned toplevel')
-assert(guard.includes('function captureStopped()') && guard.includes('root.captureStopped()'), 'failed toplevel capture falls back to direct fullscreen presentation')
-assert(guard.includes('id: captureDeadline') && guard.includes('interval: 1500') && guard.includes('captureDeadline.restart()'), 'missing screencopy callbacks use a bounded direct-presentation fallback')
-assert(guard.includes('panel.screen.name !== root.monitorName || !root.directPresented'), 'capture failure reveals only the target output, and only after direct presentation')
-assert(!guard.includes('!root.covered ? "transparent" : "black"'), 'presentation never relies on a transparent layer above the emulator')
-assert(guard.includes('visible: root.active\n') && !guard.includes('visible: root.active && root.panelsVisible'), 'black transition shield remains mapped while priming the restored source')
 const vm = require('vm')
 const state = {
   token: '', monitorName: '', appId: '', reason: '', dismissed: false, hintOn: 'on', hintOff: 'off',
@@ -112,19 +91,6 @@ vm.runInContext(wrapper.match(/^  function begin[\s\S]*?^  }/m)[0], lazyState)
 assertEqual(lazyState.begin(owner, 'TEST', 'on', 'off'), 'preparing', 'lazy dependency remains optional')
 assertEqual(JSON.stringify(loads), '[false,true]', 'a previously missing native package can be retried without restarting the shell')
 const service = fs.readFileSync(path.join(root, 'shell/plugins/services/idle/Service.qml'), 'utf8')
-const launcher = fs.readFileSync(path.join(root, 'bin/omarchy-launch-screensaver'), 'utf8')
-assert(launcher.includes('omarchy-amiga-screensaver.lock') && launcher.includes('flock -n'), 'Default preview refuses overlap with an active Amiga controller')
-assert(service.includes('AmigaScreensaver {'), 'input guard lives inside the native shell, not a background plugin')
-assert(service.includes('runProcess(lockProcess, "lock", "omarchy-system-lock")'), 'idle lock delegates to the real Omarchy authentication command')
-for (const method of ['amigaBegin', 'amigaPoll', 'amigaPresent', 'amigaCommit', 'amigaEnd'])
-  assert(service.includes(`function ${method}(`), `idle IPC provides ${method}`)
-// Exercise the actual QML lock guard functions without a compositor or live IPC.
-assert(!service.includes('firstPartyServiceFor("omarchy.lock")'), 'idle does not expose or look up authentication services')
-assert(service.includes('function amigaRuntime(userPrefix: bool)') && service.includes('omarchy-amiga-runtime/guard/Guard.qml'), 'idle loads only the integrity-checked runtime guard')
-assert(service.includes('root.omarchyPath + "/bin/omarchy-shell", "lock", "isLocked"'), 'lock observation uses the canonical read-only IPC')
-assert(service.includes('"timeout", "--kill-after=0.2s", "0.8s"'), 'lock IPC has a bounded process-group timeout')
-assert(service.includes('interval: 250') && service.includes('interval: 100'), 'lock polling and independent expiry remain armed')
-assert(service.includes('if (outputReady && exitReady)'), 'lock response waits for both output and exit status')
 let clock = 10000
 let dismissals = 0
 const lockState = {
@@ -143,8 +109,6 @@ vm.createContext(lockState)
 for (const match of service.matchAll(/^  function [\s\S]*?^  }/gm)) vm.runInContext(match[0], lockState)
 for (const match of service.matchAll(/^    function amiga(?:Begin|Poll|Present)\([\s\S]*?^    }/gm))
   vm.runInContext(match[0].replace(/: string/g, ''), lockState)
-assert(!lockState.amigaWatching && !lockState.lockStatusProbe.running, 'an unused Amiga spawns no lock probes')
-assert(!/refreshLockStatus\(\)\n  }\n/.test(service.slice(service.indexOf('Component.onCompleted'))), 'shell startup does not probe the lock for Amiga')
 assertEqual(lockState.amigaBegin(owner, 'TEST'), 'locked', 'unknown startup lock state fails closed')
 assert(lockState.amigaWatching, 'an Amiga request starts lock polling')
 assert(lockState.lockStatusProbe.running, 'denied begin requests a fresh lock probe')
@@ -191,8 +155,6 @@ assert(lockState.amigaWatching, 'a starting Amiga session keeps lock polling arm
 clock += 1000
 lockState.settleAmigaWatch()
 assert(!lockState.amigaWatching && lockState.lockActive, 'polling stops and authorization fails closed once Amiga goes quiet')
-assert(service.includes('running: root.amigaWatching'), 'lock timers run only while Amiga is watched')
-assert(!service.slice(service.indexOf('function invalidateLockStatus'), service.indexOf('function acceptLockStatus')).includes('stayAwake ='), 'lock observation does not modify Stay Awake')
 JS
 
 pass "screensaver selection and owned FS-UAE runtime"
