@@ -12,13 +12,13 @@ import tempfile
 source = (Path(os.environ['ROOT']) / 'packages/amiga-runtime/guard/Guard.qml').read_text()
 
 def body_after(marker):
-    start = source.index('{', source.index(marker))
-    depth = 1
-    for end in range(start + 1, len(source)):
-        depth += (source[end] == '{') - (source[end] == '}')
-        if depth == 0:
-            return source[start + 1:end]
-    raise AssertionError('Unbalanced handler: ' + marker)
+  start = source.index('{', source.index(marker))
+  depth = 1
+  for end in range(start + 1, len(source)):
+    depth += (source[end] == '{') - (source[end] == '}')
+    if depth == 0:
+      return source[start + 1:end]
+  raise AssertionError('Unbalanced handler: ' + marker)
 
 qml = '''import QtQuick
 import QtTest
@@ -116,13 +116,13 @@ TestCase {
 }
 '''
 for placeholder, marker in [('DISMISS', 'function dismiss('), ('PRESENT', 'function present('), ('COMMIT', 'function commit('), ('CAPTURE_STOPPED', 'function captureStopped('), ('APPLIED', 'function audioApplied('), ('TOGGLE', 'function requestAudioToggle('), ('MOTION', 'onMotion:'), ('PRESS', 'Keys.onPressed:'), ('RELEASE', 'Keys.onReleased:')]:
-    qml = qml.replace(placeholder, body_after(marker))
+  qml = qml.replace(placeholder, body_after(marker))
 qml = qml.replace('Timer { id: titleHint; interval: 5000 }', re.search(r'Timer \{ id: titleHint; interval: [0-9]+ \}', source).group(0))
 qml = qml.replace('ARRIVED', body_after('function frameArrived(') if 'function frameArrived(' in source else '')
 qml = qml.replace('Timer { id: hint; interval: 2000 }', re.search(r'Timer \{ id: hint; interval: [0-9]+ \}', source).group(0))
 with tempfile.TemporaryDirectory(prefix='mute-repro-') as directory:
-    path = Path(directory) / 'tst_m.qml'
-    path.write_text(qml)
-    env = dict(os.environ, QT_QPA_PLATFORM='offscreen', QT_QUICK_BACKEND='software', HOME='/tmp', XDG_RUNTIME_DIR=directory)
-    result = subprocess.run(['/usr/lib/qt6/bin/qmltestrunner', '-input', str(path)], env=env, timeout=20)
-    raise SystemExit(result.returncode)
+  path = Path(directory) / 'tst_m.qml'
+  path.write_text(qml)
+  env = dict(os.environ, QT_QPA_PLATFORM='offscreen', QT_QUICK_BACKEND='software', HOME='/tmp', XDG_RUNTIME_DIR=directory)
+  result = subprocess.run(['/usr/lib/qt6/bin/qmltestrunner', '-input', str(path)], env=env, timeout=20)
+  raise SystemExit(result.returncode)
