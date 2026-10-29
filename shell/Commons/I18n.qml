@@ -271,14 +271,14 @@ QtObject {
     root._changed()
   }
 
+  // The reply is read when stdout ends, not on exit: the collector can
+  // finish after the process has exited. A run that finds no catalog still
+  // prints its request line, which settles the cached system domain.
   property Process systemCatalogProcess: Process {
     running: false
-    // Exits 1 with only the request line when no locale has a catalog,
-    // which still settles the cached system domain.
-    onExited: function(exitCode) { root._systemCatalogsLoaded(systemCatalogStdout.text || "") }
     stdout: StdioCollector {
-      id: systemCatalogStdout
       waitForEnd: true
+      onStreamFinished: root._systemCatalogsLoaded(text || "")
     }
   }
 
