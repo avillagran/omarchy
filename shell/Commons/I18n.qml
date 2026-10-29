@@ -2,40 +2,124 @@ pragma Singleton
 import QtQuick
 import Quickshell
 import Quickshell.Io
+import "Plural.js" as Plural
+import "Numbers.js" as Numbers
 import "I18nModel.js" as Model
 import "I18nSystem.js" as System
 
-// qs.Commons.I18n — the shell's translation primitive.
-//
-// This file owns everything that touches Qt: the environment, the cache file,
-// system gettext loading, and reactivity. All lookup logic lives in
-// I18nModel.js so it can be tested under node.
-//
-// Translation sources, lowest to highest precedence:
-//   1. Startup snapshot (the persisted merge from the previous session)
-//   2. System gettext catalogs — /usr/share/locale/<locale>/LC_MESSAGES/*.mo
-//      (gtk30, gtk40, glib20, …) read via msgunfmt. This is the default
-//      source: Linux already ships translations for the common UI
-//      vocabulary, no packs or plugins required.
-//   3. A plugin's own i18n.json — for strings the system catalogs do not
-//      cover. Registered by shell.qml from manifest.__i18n.
-//
-// Call sites
-//   I18n.tr("Connect")                          unbound: global merge
-//   readonly property var _: I18n.domain("dev.foo.weather")
-//   _.tr("Connect")  _.trc("verb", "Open")  _.ntr(n, "%1 city", "%1 cities", [n])
-//
-// With nothing registered every call returns its source string, so a stock
-// install is unaffected. Catalogs arrive late — the msgunfmt process and the
-// plugin registry finish after startup — so lookups read `revision` and any
-// binding that called tr() re-evaluates when a catalog registers. To avoid
-// a flash of English on every login, the merged catalogs are persisted to
-// $XDG_CACHE_HOME/omarchy/i18n/<language>.json and loaded synchronously here,
-// before the first frame. The Bash helper in default/bash/i18n reads the
-// same file.
-
+// Display-language strings for the shell. The selected code lives in
+// ~/.config/omarchy/language (omarchy-language owns it); a missing file
+// means English. Strings come from default/i18n/<code>/shell.json layered
+// over the English catalog, so a missing translation falls back to English
+// per string. Use as I18n.t("common.search"), with .arg(...) for %1 holes,
+// and I18n.tn(key, count).arg(I18n.formatNumber(count)) for an
+// entry with plural forms.
+// The language file is watched, so switching language under Setup
+// re-renders the shell without a restart.
 QtObject {
   id: root
+
+  readonly property string omarchyPath: Quickshell.env("OMARCHY_PATH")
+  readonly property string configHome: Quickshell.env("XDG_CONFIG_HOME") || (Quickshell.env("HOME") + "/.config")
+
+  readonly property string language: languageCode(languageFile.text())
+  readonly property var localeSettings: parseCatalog(registryFile.text())[root.language] || ({})
+  readonly property string formatLocale: localeSettings.formatLocale || "en-US"
+  // From the registry: how numbers are written and which way text runs.
+  readonly property string decimal: localeSettings.decimal || "."
+  readonly property string zeroDigit: localeSettings.zeroDigit || "0"
+  readonly property bool rightToLeft: localeSettings.direction === "rtl"
+
+  // Reading text() makes blockLoading take effect on the first lookup.
+  // These bindings also rebuild the maps when a watched catalog changes.
+  readonly property var englishStrings: parseCatalog(englishCatalogFile.text())
+  readonly property var languageStrings: parseCatalog(languageCatalogFile.text())
+  readonly property var strings: {
+    var merged = ({})
+    for (var k in root.englishStrings) merged[k] = root.englishStrings[k]
+    for (var k2 in root.languageStrings) merged[k2] = root.languageStrings[k2]
+    return merged
+  }
+
+  // The optional fallback is what imperative callers (the JS models) pass
+  // as their English text: for a key the catalogs do not carry, they keep
+  // sensible English instead of a raw key.
+  function t(key, fallback) {
+    var value = root.strings[key]
+    if (value && typeof value === "object") value = value.other
+    if (typeof value === "string" && value.length > 0) return value
+    return fallback !== undefined ? fallback : key
+  }
+
+  // The form of a plural entry for count, by the language's plural rules
+  // (Plural.js). The English entry answers when the translation has none.
+  function tn(key, count, fallback) {
+    var value = Plural.pick(root.languageStrings[key], root.language, count)
+    if (typeof value !== "string" || value.length === 0) value = Plural.pick(root.englishStrings[key], "en", count)
+    if (typeof value === "string" && value.length > 0) return value
+    return fallback !== undefined ? fallback : key
+  }
+
+  // A number with the language's decimal separator and digits, ungrouped:
+  // formatNumber(13.14, 1) is "13,1" in Danish. Pass decimals to round;
+  // without them the value is written as it is.
+  function formatNumber(value, decimals) {
+    return Numbers.format(value, decimals, root.decimal, root.zeroDigit)
+  }
+
+  function parseCatalog(raw) {
+    try {
+      var parsed = JSON.parse(raw || "{}")
+      return (parsed && typeof parsed === "object" && !Array.isArray(parsed)) ? parsed : ({})
+    } catch (e) {
+      return ({})
+    }
+  }
+
+  function languageCode(raw) {
+    var code = String(raw || "").trim()
+    if (!/^[a-z]{2,3}(-[A-Za-z]{2})?$/.test(code)) code = "en"
+    return code
+  }
+
+  // The catalogs are small local files, read synchronously so the first
+  // binding to call t() already gets the string rather than the raw key.
+  property FileView languageFile: FileView {
+    // OMARCHY_LANGUAGE_FILE overrides the location, as it does for
+    // omarchy-i18n, so tests can pin a language whatever the machine uses.
+    path: Quickshell.env("OMARCHY_LANGUAGE_FILE") || (root.configHome + "/omarchy/language")
+    watchChanges: true
+    printErrors: false
+    blockLoading: true
+    onFileChanged: reload()
+  }
+
+  property FileView englishCatalogFile: FileView {
+    path: root.omarchyPath + "/default/i18n/en/shell.json"
+    watchChanges: true
+    printErrors: false
+    blockLoading: true
+    onFileChanged: reload()
+  }
+
+  property FileView languageCatalogFile: FileView {
+    path: root.omarchyPath + "/default/i18n/" + root.language + "/shell.json"
+    watchChanges: true
+    printErrors: false
+    blockLoading: true
+    onFileChanged: reload()
+  }
+
+  property FileView registryFile: FileView {
+    path: root.omarchyPath + "/default/i18n/locales.json"
+    watchChanges: true
+    printErrors: false
+    blockLoading: true
+    onFileChanged: reload()
+  }
+
+  // Runtime translation by source string (tr, trc, ntr), for labels the
+  // Ui kit renders on behalf of plugins.
 
   // ---------------------------------------------------------------------
   // Locale
@@ -47,9 +131,10 @@ QtObject {
     LANG: Quickshell.env("LANG")
   })
 
-  // Primary language code ("ca" for ca_ES, or the first LANGUAGE entry).
-  // Empty means English / C: nothing to translate and no cache to keep.
-  readonly property string language: candidates.length > 0 ? candidates[0].split("_")[0] : ""
+  // Primary gettext language code ("ca" for ca_ES, or the first LANGUAGE
+  // entry). Empty means English / C: nothing to translate and no cache to
+  // keep. Distinct from language above, the code picked under Setup.
+  readonly property string gettextLanguage: candidates.length > 0 ? candidates[0].split("_")[0] : ""
 
   // Where a pack's locale sits in the user's preference order, for use as
   // its registration precedence. -1 means the pack does not apply.
@@ -208,7 +293,7 @@ QtObject {
     var base = xdg ? String(xdg) : String(Quickshell.env("HOME")) + "/.cache"
     return base.replace(/\/$/, "") + "/omarchy/i18n"
   }
-  readonly property string cachePath: language ? cacheDir + "/" + language + ".json" : ""
+  readonly property string cachePath: gettextLanguage ? cacheDir + "/" + gettextLanguage + ".json" : ""
 
   property FileView cacheFile: FileView {
     path: root.cachePath
