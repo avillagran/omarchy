@@ -16,6 +16,11 @@ import qs.Commons as Commons
 BorderSurface {
   id: root
 
+  // Labels are translated by their English source string (I18n.label), so
+  // a plugin's text follows the picked language without code changes. Set
+  // false for user or machine text (a device or host name, an email) that
+  // must show exactly as given.
+  property bool translate: true
   property string label: ""
   property string description: ""
   property bool checked: false
@@ -71,7 +76,7 @@ BorderSurface {
 
       Text {
         textFormat: Text.PlainText
-        text: root.label !== "" ? I18n.tr(root.label) : ""
+        text: root.translate ? I18n.label(root.label) : root.label
         color: root.foreground
         font.family: root.fontFamily
         font.pixelSize: root.titleSize
@@ -83,7 +88,7 @@ BorderSurface {
       Text {
         textFormat: Text.PlainText
         visible: root.description !== ""
-        text: root.description !== "" ? I18n.tr(root.description) : ""
+        text: root.translate ? I18n.label(root.description) : root.description
         color: Qt.darker(root.foreground, 1.5)
         font.family: root.fontFamily
         font.pixelSize: root.descriptionSize
