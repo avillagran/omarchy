@@ -30,6 +30,17 @@ class SelectionTest(unittest.TestCase):
     path.write_text('#!/bin/bash\n' + body + '\n')
     path.chmod(0o755)
 
+  def launch(self, *args):
+    # The native screensaver lives at a fixed system path; point a private
+    # copy of the launcher at a recording stub instead.
+    native = '/usr/lib/omarchy-screensaver/omarchy-screensaver'
+    source = (ROOT / 'bin/omarchy-launch-screensaver').read_text()
+    assert native in source
+    launcher = self.home / 'omarchy-launch-screensaver'
+    launcher.write_text(source.replace(native, str(self.bin / 'native-screensaver')))
+    self.stub('native-screensaver', 'printf "%s\\n" "$*" >> "$HOME/native-ran"')
+    return subprocess.run(['bash', str(launcher), *args], env=self.env, capture_output=True)
+
   def run_command(self, *args):
     return subprocess.run(['bash', str(ROOT / 'bin/omarchy-setup-screensaver'), *args],
                           env=self.env, capture_output=True, text=True)
@@ -131,48 +142,46 @@ class SelectionTest(unittest.TestCase):
     self.state.write_text('amiga\n')
     self.stub('omarchy-toggle-enabled', 'exit 1')
     self.stub('pgrep', 'exit 1')
+    self.stub('omarchy-shell', 'exit 0')
     self.stub('omarchy-screensaver-amiga', 'touch "$HOME/amiga-ran"')
-    self.stub('omarchy-hyprland-monitor-focused', 'echo TEST')
-    self.stub('xdg-terminal-exec', 'echo unsupported')
-    self.stub('omarchy-notification-send', 'exit 0')
-    def launch(*args):
-      return subprocess.run(['bash', str(ROOT / 'bin/omarchy-launch-screensaver'), *args], env=self.env, capture_output=True)
-    self.assertEqual(launch().returncode, 0)
+    native = self.home / 'native-ran'
+    self.assertEqual(self.launch().returncode, 0)
     self.assertTrue((self.home / 'amiga-ran').exists())
+    self.assertFalse(native.exists())
     (self.home / 'amiga-ran').unlink()
-    self.assertNotEqual(launch('force', 'text').returncode, 0)
+    self.assertEqual(self.launch('force', 'text').returncode, 0)
     self.assertFalse((self.home / 'amiga-ran').exists())
+    self.assertEqual(native.read_text(), 'force\n')
+    native.unlink()
     self.stub('omarchy-toggle-enabled', 'exit 0')
-    self.assertNotEqual(launch().returncode, 0)
+    self.assertNotEqual(self.launch().returncode, 0)
     self.assertFalse((self.home / 'amiga-ran').exists())
-    self.assertEqual(launch('force').returncode, 0)
+    self.assertFalse(native.exists())
+    self.assertEqual(self.launch('force').returncode, 0)
+    self.assertTrue((self.home / 'amiga-ran').exists())
+    self.assertFalse(native.exists())
 
   def test_default_force_dispatches_only_the_original_screensaver(self):
     self.state.parent.mkdir(parents=True)
     self.state.write_text('default\n')
-    self.stub('omarchy-toggle-enabled', 'exit 0')
-    self.stub('pgrep', 'exit 1')
     self.stub('omarchy-screensaver-amiga', 'touch "$HOME/amiga-ran"; exit 9')
-    self.stub('omarchy-hyprland-monitor-focused', 'echo TEST')
-    self.stub('xdg-terminal-exec', 'echo foot')
-    self.stub('socat', 'exit 0')
-    self.stub('hyprctl', 'printf "%s\\n" "$*" >> "$HOME/hyprctl-calls"; if [[ $1 == monitors ]]; then printf "[{\\"name\\":\\"TEST\\"}]\\n"; fi; exit 0')
-    result = subprocess.run(['bash', str(ROOT / 'bin/omarchy-launch-screensaver'), 'force'], env=self.env, capture_output=True)
+    result = self.launch('force', '--frame-rate', '30')
     self.assertEqual(result.returncode, 0, result.stderr.decode())
     self.assertFalse((self.home / 'amiga-ran').exists())
-    self.assertIn('omarchy-screensaver', (self.home / 'hyprctl-calls').read_text())
+    self.assertEqual((self.home / 'native-ran').read_text(), 'force --frame-rate 30\n')
 
   def test_amiga_failure_never_falls_back_to_text_or_ttfx(self):
     self.state.parent.mkdir(parents=True)
     self.state.write_text('amiga\n')
     self.stub('omarchy-toggle-enabled', 'exit 1')
     self.stub('pgrep', 'exit 1')
+    self.stub('omarchy-shell', 'exit 0')
     self.stub('omarchy-screensaver-amiga', 'exit 1')
-    for name in ('ttfx', 'xdg-terminal-exec', 'omarchy-screensaver'):
-      self.stub(name, 'touch "$HOME/alternate-backend"')
-    result = subprocess.run(['bash', str(ROOT / 'bin/omarchy-launch-screensaver'), 'force'], env=self.env, capture_output=True)
+    self.stub('ttfx', 'touch "$HOME/alternate-backend"')
+    result = self.launch('force')
     self.assertNotEqual(result.returncode, 0)
     self.assertFalse((self.home / 'alternate-backend').exists())
+    self.assertFalse((self.home / 'native-ran').exists())
 
   def test_missing_readiness_probes_only_bundle_contract(self):
     self.stub('uname', 'printf "x86_64\\n"')
