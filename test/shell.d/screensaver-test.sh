@@ -3,10 +3,32 @@
 set -euo pipefail
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/base-test.sh"
 
-PYTHONDONTWRITEBYTECODE=1 python3 "$ROOT/test/shell.d/fixtures/screensaver_test.py"
-PYTHONDONTWRITEBYTECODE=1 python3 "$ROOT/test/shell.d/fixtures/amiga_native_test.py"
-PYTHONDONTWRITEBYTECODE=1 python3 "$ROOT/test/shell.d/fixtures/amiga_renderer_test.py"
-PYTHONDONTWRITEBYTECODE=1 python3 "$ROOT/test/shell.d/fixtures/amiga_top_pack_test.py"
+# The Amiga fixtures exercise process-lifecycle code (signals, pidfds, sandbox
+# launches) and refuse to run in the desktop's namespaces. Re-enter this file
+# in a private bubblewrap sandbox with the checkout read-only, home and runtime
+# sockets masked, and the environment cleared.
+if [[ -z ${OMARCHY_TEST_HOST_pid:-} ]]; then
+  if ! command -v bwrap >/dev/null || ! bwrap --unshare-all --die-with-parent --ro-bind / / true 2>/dev/null; then
+    skip "unprivileged bubblewrap namespaces unavailable; skipping Amiga screensaver fixtures"
+    exit 0
+  fi
+  sandbox=(--unshare-all --die-with-parent --new-session --ro-bind / / --proc /proc --dev /dev
+    --tmpfs /tmp --tmpfs /run --tmpfs /home --ro-bind "$ROOT" /tmp/work --chdir /tmp/work
+    --dir /tmp/tools --clearenv --setenv PATH /tmp/tools:/usr/bin:/bin --setenv HOME /tmp
+    --setenv LANG C.UTF-8 --setenv PYTHONDONTWRITEBYTECODE 1 --setenv ROOT /tmp/work --setenv OMARCHY_PATH /tmp/work)
+  if node=$(command -v node); then
+    sandbox+=(--ro-bind "$(readlink -f "$node")" /tmp/tools/node)
+  fi
+  for namespace in pid user mnt net; do
+    sandbox+=(--setenv "OMARCHY_TEST_HOST_$namespace" "$(readlink "/proc/self/ns/$namespace")")
+  done
+  exec bwrap "${sandbox[@]}" bash /tmp/work/test/shell.d/screensaver-test.sh
+fi
+
+python3 "$ROOT/test/shell.d/fixtures/screensaver_test.py"
+python3 "$ROOT/test/shell.d/fixtures/amiga_native_test.py"
+python3 "$ROOT/test/shell.d/fixtures/amiga_renderer_test.py"
+python3 "$ROOT/test/shell.d/fixtures/amiga_top_pack_test.py"
 run_node_test <<'JS'
 const fs = require('fs')
 const menu = requireFromRoot('shell/plugins/menu/MenuModel.js')
