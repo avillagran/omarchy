@@ -5,7 +5,7 @@
   //
   // Keys are plugin ids; values override the built-in defaults:
   //   enabled   true/false  show or hide the plugin
-  //   language  "en" | "es"  language of the result's detail text
+  //   language  "en" | "es" | ...  which of the plugin's i18n names to show
   //
   // The calculator and web search ship enabled. To turn the web search off:
   //
@@ -15,11 +15,11 @@
   //   }
   // }
   //
-  // To make the calculator report its copy hint in Spanish:
+  // To show a plugin's Spanish name whatever the menu language:
   //
   // {
   //   "plugins": {
-  //     "omarchy.query.calc": { "language": "es" }
+  //     "com.example.clip": { "language": "es" }
   //   }
   // }
 }

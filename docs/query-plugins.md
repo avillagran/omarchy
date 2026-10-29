@@ -27,7 +27,7 @@ Plugins live in `~/.config/omarchy/query-plugins.json` (a JSON array). The menu 
 | `action` | `copy` copies the result to the clipboard; `run` executes the command again on Enter. A `web` plugin's command prints a URL, and Enter opens that URL in a browser web app. |
 | `keyword` | Only fire when the query starts with this prefix. Required for `copy`/`run`/`snippet`; optional for `web`. |
 | `enabled` | `false` disables the plugin. |
-| `language` | Language used for `i18n` and the row's detail text (`en` or `es`); defaults to the menu's language, falling back to English. |
+| `language` | Which `i18n` entry names the plugin; defaults to the menu's language, falling back to `label`. The row's own hint text (`Copy to clipboard`, `Search: …`) always follows the menu's language. |
 
 `kind` firing rules:
 
