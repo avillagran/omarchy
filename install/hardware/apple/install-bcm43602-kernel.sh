@@ -49,7 +49,6 @@ EOF
     echo "Error: candidate and stock boot entries were not generated correctly" >&2
     return 1
   fi
-
 }
 
 install_apple_bcm43602_kernel

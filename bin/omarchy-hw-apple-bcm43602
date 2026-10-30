@@ -9,6 +9,14 @@ set -euo pipefail
 apple_bcm43602_matches() {
   local arch="$1" sys_vendor="$2" product_name="$3" pci_info="$4"
 
+  # Only MacBookPro12,1 has been confirmed to show the BCM43602 resume bug.
+  # Other Macs ship the same chip (14e4:43ba, Apple subsystem 106b:0133),
+  # e.g. MacBookPro11,4/11,5 and MacBookAir7,x. Once one of them is confirmed
+  # to hit the same bug on suspend/resume, add its DMI product_name to the
+  # allow-list below (e.g. `($product_name == "MacBookPro12,1" ||
+  # $product_name == "MacBookPro11,4")`) and add a matching case to
+  # test/shell.d/apple-bcm43602-kernel-test.sh.
+
   [[ $arch == "x86_64" && $sys_vendor == "Apple Inc." &&
     $product_name == "MacBookPro12,1" &&
     $pci_info == *"[14e4:43ba]"* && $pci_info == *"[106b:0133]"* ]]

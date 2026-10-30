@@ -106,7 +106,7 @@ fixture_env=(
 reset_fixture() {
   : >"$calls"
   printf '%s\n' linux >"$installed"
-  rm -rf "$test_tmp/boot" "$test_tmp/etc"
+  rm -rf "${test_tmp:?}/boot" "${test_tmp:?}/etc"
 }
 
 run_leaf() {
