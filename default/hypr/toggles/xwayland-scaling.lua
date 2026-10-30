@@ -7,8 +7,9 @@
 -- half size (RealVNC Viewer, older Java/Motif/Tk apps, some installers).
 --
 -- Turning this flag on drops force_zero_scaling so the compositor upscales
--- those windows to the monitor scale: correct apparent size, at the cost of
--- slightly softer text on X11 apps that were already scaling themselves.
+-- those windows to the monitor scale. It applies to every X11 window: apps
+-- that were already scaling themselves look softer, and GTK apps that honor
+-- GDK_SCALE get scaled twice and come out oversized.
 hl.config({
   xwayland = {
     force_zero_scaling = false,

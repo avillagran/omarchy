@@ -36,7 +36,7 @@ On a scaled monitor, Omarchy hands X11 (XWayland) apps an unscaled surface, and 
 
 Some X11 apps ignore those hints entirely and just render at 1x, so on a 2x monitor their text and buttons come out half size. RealVNC Viewer is the usual example, along with older Java/Motif/Tk apps and some installers.
 
-Pick _Trigger > Toggle > X11 App Scaling On_ in the Omarchy menu (or run `omarchy-hyprland-xwayland-scaling-toggle`) to have the compositor upscale those windows to the monitor scale instead. Each window is scaled by the scale of the monitor it's actually on, so a mixed 2x + 1x setup keeps both correct, and a window re-scales when you drag it across. The tradeoff is that X11 apps which were already scaling themselves properly will look slightly softer while this is on, so flip it back off if you don't need it. While it's on, that row reads _X11 App Scaling Off_ instead, and either way you get a notification to restart the affected app.
+Pick _Trigger > Toggle > X11 App Scaling On_ in the Omarchy menu (or run `omarchy-hyprland-xwayland-scaling-toggle`) to have the compositor upscale those windows to the monitor scale instead. Each window is scaled by the scale of the monitor it's actually on, so a mixed 2x + 1x setup keeps both correct, and a window re-scales when you drag it across. This applies to every X11 window, not just the one you're fixing: X11 apps that already scale themselves will look softer, and GTK apps that honor `GDK_SCALE` get scaled twice and come out oversized (twice the size on a 2x monitor), so only leave it on while you need it. While it's on, that row reads _X11 App Scaling Off_ instead, and either way you get a notification to restart the affected app.
 
 ### Extending and mirroring laptop displays
 
