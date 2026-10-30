@@ -160,11 +160,12 @@ fi
 pass "insufficient boot space fails before changing the system"
 
 reset_fixture
-if env "${fixture_env[@]}" -u OMARCHY_BCM43602_BOOT_AVAILABLE_KIB \
-  OMARCHY_BCM43602_BOOT_PATH="$test_tmp/missing-boot" \
-  bash -euo pipefail "$leaf" >/dev/null 2>&1; then
+if run_leaf OMARCHY_BCM43602_BOOT_AVAILABLE_KIB= \
+  OMARCHY_BCM43602_BOOT_PATH="$test_tmp/missing-boot" >/dev/null 2>"$test_tmp/boot-space.err"; then
   fail "installation refuses an unreadable boot filesystem"
 fi
+grep -Fq 'Error: could not determine free space on /boot' "$test_tmp/boot-space.err" ||
+  fail "an unreadable boot filesystem reports the boot-space error" "$(cat "$test_tmp/boot-space.err")"
 [[ ! -s $calls ]] || fail "an unreadable boot filesystem is detected before package installation"
 pass "boot-space detection fails closed"
 
