@@ -9,7 +9,9 @@ crate-type = ["staticlib", "rlib"]
 
 [dependencies]
 clap = "4"
-ttfx = { path = "vendor/ttfx" }
+# The embedded adapter uses Effect::next_frame, not the terminal-owning ASM runner.
+# Keep the Rust backend explicit until ASM exposes a bounded structured step API.
+ttfx = { path = "vendor/ttfx", default-features = false }
 
 [profile.plymouth]
 inherits = "release"

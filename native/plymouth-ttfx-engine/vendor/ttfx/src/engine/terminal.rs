@@ -106,12 +106,7 @@ pub struct CharacterFilter {
 
 impl Default for CharacterFilter {
     fn default() -> Self {
-        CharacterFilter {
-            input_chars: true,
-            inner_fill_chars: false,
-            outer_fill_chars: false,
-            added_chars: false,
-        }
+        CharacterFilter { input_chars: true, inner_fill_chars: false, outer_fill_chars: false, added_chars: false }
     }
 }
 
@@ -123,7 +118,6 @@ pub struct Terminal {
     pub input_colors_frequency: ColorFrequency,
     terminal_dimensions: (i64, i64),
     resize_seen_at: Option<Instant>,
-    layout: Layout,
     /// Pre-wrap input line lengths — all `compute_layout` needs from the input,
     /// so a resize can re-derive the geometry without re-preprocessing.
     input_line_lengths: Vec<i64>,
@@ -172,19 +166,12 @@ fn ordered_buckets(
             buckets[(character_key - first_key) as usize].push(id);
         }
     }
-    buckets
-        .into_iter()
-        .filter(|bucket| !bucket.is_empty())
-        .collect()
+    buckets.into_iter().filter(|bucket| !bucket.is_empty()).collect()
 }
 
 impl Terminal {
     pub fn new(input_data: &str, config: TerminalConfig) -> Result<Self, EngineError> {
-        let input_data = if input_data.is_empty() {
-            "No Input."
-        } else {
-            input_data
-        };
+        let input_data = if input_data.is_empty() { "No Input." } else { input_data };
         let mut arena: Vec<EffectCharacter> = Vec::new();
         let mut next_character_id: u32 = 0;
         let mut input_colors_frequency = ColorFrequency::default();
@@ -197,15 +184,9 @@ impl Terminal {
         }
         .preprocess(input_data)?;
 
-        let input_line_lengths: Vec<i64> =
-            preprocessed_lines.iter().map(|l| l.len() as i64).collect();
+        let input_line_lengths: Vec<i64> = preprocessed_lines.iter().map(|l| l.len() as i64).collect();
         let terminal_dimensions = terminal_dimensions_for_config(&config, get_terminal_dimensions);
-        let layout = compute_layout(
-            &config,
-            &input_line_lengths,
-            terminal_dimensions.0,
-            terminal_dimensions.1,
-        );
+        let layout = compute_layout(&config, &input_line_lengths, terminal_dimensions.0, terminal_dimensions.1);
         let mut canvas = Canvas::new(layout.canvas_height, layout.canvas_width);
         let Layout {
             column_offset: canvas_column_offset,
@@ -217,14 +198,13 @@ impl Terminal {
             ..
         } = layout;
 
-        let input_characters =
-            setup_input_characters(&config, &mut canvas, &mut arena, preprocessed_lines)?
-                .into_iter()
-                .filter(|&id| {
-                    let coord = arena[id.0 as usize].input_coord;
-                    coord.row <= canvas.top && coord.column <= canvas.right
-                })
-                .collect::<Vec<_>>();
+        let input_characters = setup_input_characters(&config, &mut canvas, &mut arena, preprocessed_lines)?
+            .into_iter()
+            .filter(|&id| {
+                let coord = arena[id.0 as usize].input_coord;
+                coord.row <= canvas.top && coord.column <= canvas.right
+            })
+            .collect::<Vec<_>>();
 
         let mut character_by_input_coord: HashMap<Coord, CharId> = HashMap::new();
         for &id in &input_characters {
@@ -247,7 +227,6 @@ impl Terminal {
             input_colors_frequency,
             terminal_dimensions,
             resize_seen_at: None,
-            layout,
             input_line_lengths,
             canvas_column_offset,
             canvas_row_offset,
@@ -307,28 +286,12 @@ impl Terminal {
     }
 
     fn setup_character_neighbors(&mut self) {
-        let coords: Vec<(Coord, CharId)> = self
-            .character_by_input_coord
-            .iter()
-            .map(|(&c, &id)| (c, id))
-            .collect();
+        let coords: Vec<(Coord, CharId)> = self.character_by_input_coord.iter().map(|(&c, &id)| (c, id)).collect();
         for (coord, id) in coords {
-            let n = self
-                .character_by_input_coord
-                .get(&Coord::new(coord.column, coord.row + 1))
-                .copied();
-            let e = self
-                .character_by_input_coord
-                .get(&Coord::new(coord.column + 1, coord.row))
-                .copied();
-            let s = self
-                .character_by_input_coord
-                .get(&Coord::new(coord.column, coord.row - 1))
-                .copied();
-            let w = self
-                .character_by_input_coord
-                .get(&Coord::new(coord.column - 1, coord.row))
-                .copied();
+            let n = self.character_by_input_coord.get(&Coord::new(coord.column, coord.row + 1)).copied();
+            let e = self.character_by_input_coord.get(&Coord::new(coord.column + 1, coord.row)).copied();
+            let s = self.character_by_input_coord.get(&Coord::new(coord.column, coord.row - 1)).copied();
+            let w = self.character_by_input_coord.get(&Coord::new(coord.column - 1, coord.row)).copied();
             let ch = &mut self.arena[id.0 as usize];
             ch.neighbors.north = n;
             ch.neighbors.east = e;
@@ -398,23 +361,10 @@ impl Terminal {
     }
 
     pub fn collect_characters(&self, filter: CharacterFilter) -> Vec<CharId> {
-        let capacity = if filter.input_chars {
-            self.input_characters.len()
-        } else {
-            0
-        } + if filter.inner_fill_chars {
-            self.inner_fill_characters.len()
-        } else {
-            0
-        } + if filter.outer_fill_chars {
-            self.outer_fill_characters.len()
-        } else {
-            0
-        } + if filter.added_chars {
-            self.added_characters.len()
-        } else {
-            0
-        };
+        let capacity = if filter.input_chars { self.input_characters.len() } else { 0 }
+            + if filter.inner_fill_chars { self.inner_fill_characters.len() } else { 0 }
+            + if filter.outer_fill_chars { self.outer_fill_characters.len() } else { 0 }
+            + if filter.added_chars { self.added_characters.len() } else { 0 };
         let mut all: Vec<CharId> = Vec::with_capacity(capacity);
         if filter.input_chars {
             all.extend(&self.input_characters);
@@ -432,12 +382,7 @@ impl Terminal {
     }
 
     /// Terminal.get_characters with all sort variants.
-    pub fn get_characters(
-        &self,
-        rng: &mut Rng,
-        filter: CharacterFilter,
-        sort: CharacterSort,
-    ) -> Vec<CharId> {
+    pub fn get_characters(&self, rng: &mut Rng, filter: CharacterFilter, sort: CharacterSort) -> Vec<CharId> {
         let mut all = self.collect_characters(filter);
         // default sort: (-row, column), stable
         all.sort_by_key(|&id| {
@@ -462,11 +407,7 @@ impl Terminal {
                 let mut deque: std::collections::VecDeque<CharId> = all.into();
                 let mut interleaved = Vec::with_capacity(deque.len());
                 let mut from_front = true;
-                while let Some(id) = if from_front {
-                    deque.pop_front()
-                } else {
-                    deque.pop_back()
-                } {
+                while let Some(id) = if from_front { deque.pop_front() } else { deque.pop_back() } {
                     interleaved.push(id);
                     from_front = !from_front;
                 }
@@ -480,11 +421,7 @@ impl Terminal {
     }
 
     /// Terminal.get_characters_grouped with all grouping variants.
-    pub fn get_characters_grouped(
-        &self,
-        filter: CharacterFilter,
-        grouping: CharacterGroup,
-    ) -> Vec<Vec<CharId>> {
+    pub fn get_characters_grouped(&self, filter: CharacterFilter, grouping: CharacterGroup) -> Vec<Vec<CharId>> {
         let mut all = self.collect_characters(filter);
         all.sort_by_key(|&id| {
             let c = self.arena[id.0 as usize].input_coord;
@@ -493,8 +430,7 @@ impl Terminal {
         let coord = |id: &CharId| self.arena[id.0 as usize].input_coord;
         match grouping {
             CharacterGroup::ColumnLeftToRight | CharacterGroup::ColumnRightToLeft => {
-                let mut columns =
-                    ordered_buckets(all, 0, self.canvas.right, |id| coord(&id).column);
+                let mut columns = ordered_buckets(all, 0, self.canvas.right, |id| coord(&id).column);
                 if grouping == CharacterGroup::ColumnRightToLeft {
                     columns.reverse();
                 }
@@ -507,20 +443,17 @@ impl Terminal {
                 }
                 rows
             }
-            CharacterGroup::DiagonalBottomLeftToTopRight
-            | CharacterGroup::DiagonalTopRightToBottomLeft => {
-                let mut diagonals =
-                    ordered_buckets(all, 0, self.canvas.top + self.canvas.right, |id| {
-                        let c = coord(&id);
-                        c.row + c.column
-                    });
+            CharacterGroup::DiagonalBottomLeftToTopRight | CharacterGroup::DiagonalTopRightToBottomLeft => {
+                let mut diagonals = ordered_buckets(all, 0, self.canvas.top + self.canvas.right, |id| {
+                    let c = coord(&id);
+                    c.row + c.column
+                });
                 if grouping == CharacterGroup::DiagonalTopRightToBottomLeft {
                     diagonals.reverse();
                 }
                 diagonals
             }
-            CharacterGroup::DiagonalTopLeftToBottomRight
-            | CharacterGroup::DiagonalBottomRightToTopLeft => {
+            CharacterGroup::DiagonalTopLeftToBottomRight | CharacterGroup::DiagonalBottomRightToTopLeft => {
                 let mut diagonals = ordered_buckets(
                     all,
                     self.canvas.left - self.canvas.top,
@@ -581,9 +514,7 @@ impl Terminal {
     fn update_render_cells(&mut self) -> (usize, usize) {
         let width = self.visible_right.max(0) as usize;
         let height = self.visible_top.max(0) as usize;
-        let cell_count = width
-            .checked_mul(height)
-            .expect("terminal canvas is too large");
+        let cell_count = width.checked_mul(height).expect("terminal canvas is too large");
         self.render_cells.resize(cell_count, EMPTY_RENDER_CELL);
         self.render_cells.fill(EMPTY_RENDER_CELL);
 
@@ -600,8 +531,7 @@ impl Terminal {
                 && self.visible_left <= column
                 && column <= self.visible_right
             {
-                let cell =
-                    &mut self.render_cells[(row - 1) as usize * width + (column - 1) as usize];
+                let cell = &mut self.render_cells[(row - 1) as usize * width + (column - 1) as usize];
                 if *cell == EMPTY_RENDER_CELL {
                     *cell = id.0;
                 } else {
@@ -650,13 +580,7 @@ impl Terminal {
                 if cell == EMPTY_RENDER_CELL {
                     row.push(' ');
                 } else {
-                    row.push_str(
-                        arena[cell as usize]
-                            .animation
-                            .current_character_visual
-                            .formatted_symbol
-                            .as_str(),
-                    );
+                    row.push_str(arena[cell as usize].animation.current_character_visual.formatted_symbol.as_str());
                 }
             }
         }
@@ -683,11 +607,7 @@ impl Terminal {
                 if cell == EMPTY_RENDER_CELL {
                     out.push(b' ');
                 } else {
-                    arena[cell as usize]
-                        .animation
-                        .current_character_visual
-                        .formatted_symbol
-                        .append_to(&mut out);
+                    arena[cell as usize].animation.current_character_visual.formatted_symbol.append_to(&mut out);
                 }
             }
         }
@@ -714,23 +634,12 @@ impl Terminal {
     /// exactly where it was, and restarting for those is pure loss. Explicitly
     /// ignored dimensions are fixed by definition.
     pub fn resize_settled(&mut self) -> bool {
-        const QUIET: std::time::Duration = std::time::Duration::from_millis(50);
-
-        if crate::take_terminal_resize() {
-            self.resize_seen_at = Some(Instant::now());
-        }
-        match self.resize_seen_at {
-            Some(seen) if seen.elapsed() >= QUIET => self.resize_seen_at = None,
-            _ => return false,
-        }
-        if self.config.ignore_terminal_dimensions {
-            return false;
-        }
-        let (width, height) = get_terminal_dimensions();
-        if (width, height) == self.terminal_dimensions {
-            return false;
-        }
-        compute_layout(&self.config, &self.input_line_lengths, width, height) != self.layout
+        resize_settled(
+            &mut self.resize_seen_at,
+            &self.config,
+            &self.input_line_lengths,
+            self.terminal_dimensions,
+        )
     }
 
     /// After a resize: go back to the top of the area this run allocated, wipe
@@ -770,11 +679,7 @@ impl Terminal {
         Ok(())
     }
 
-    pub fn print_frame(
-        &mut self,
-        out: &mut impl Write,
-        output_string: &str,
-    ) -> std::io::Result<()> {
+    pub fn print_frame(&mut self, out: &mut impl Write, output_string: &str) -> std::io::Result<()> {
         self.write_move_cursor_to_top(out)?;
         out.write_all(output_string.as_bytes())?;
         out.flush()
@@ -799,6 +704,35 @@ impl Terminal {
     }
 }
 
+/// [`Terminal::resize_settled`] for a run described only by its settings,
+/// input line lengths and starting dimensions - what the assembly engine's
+/// runs are, as far as Rust can see them.
+pub fn resize_settled(
+    seen_at: &mut Option<Instant>,
+    config: &TerminalConfig,
+    line_lengths: &[i64],
+    dimensions: (i64, i64),
+) -> bool {
+    const QUIET: std::time::Duration = std::time::Duration::from_millis(50);
+
+    if crate::take_terminal_resize() {
+        *seen_at = Some(Instant::now());
+    }
+    match *seen_at {
+        Some(seen) if seen.elapsed() >= QUIET => *seen_at = None,
+        _ => return false,
+    }
+    if config.ignore_terminal_dimensions {
+        return false;
+    }
+    let (width, height) = get_terminal_dimensions();
+    if (width, height) == dimensions {
+        return false;
+    }
+    compute_layout(config, line_lengths, width, height)
+        != compute_layout(config, line_lengths, dimensions.0, dimensions.1)
+}
+
 fn terminal_dimensions_for_config(
     config: &TerminalConfig,
     probe: impl FnOnce() -> (i64, i64),
@@ -812,8 +746,10 @@ fn terminal_dimensions_for_config(
 
 /// shutil.get_terminal_size semantics: COLUMNS/LINES env vars win; else query
 /// the tty; on failure (80, 24).
-fn get_terminal_dimensions() -> (i64, i64) {
-    let env_dim = |name: &str| -> Option<i64> { std::env::var(name).ok()?.parse::<i64>().ok() };
+pub fn get_terminal_dimensions() -> (i64, i64) {
+    let env_dim = |name: &str| -> Option<i64> {
+        std::env::var(name).ok()?.parse::<i64>().ok()
+    };
     let columns = env_dim("COLUMNS");
     let lines = env_dim("LINES");
     if let (Some(c), Some(l)) = (columns, lines) {
@@ -899,10 +835,7 @@ fn get_canvas_dimensions(
         if config.ignore_terminal_dimensions {
             input_height
         } else if config.wrap_text {
-            std::cmp::min(
-                wrapped_line_count(line_lengths, canvas_width),
-                terminal_height,
-            )
+            std::cmp::min(wrapped_line_count(line_lengths, canvas_width), terminal_height)
         } else {
             std::cmp::min(terminal_height, input_height)
         }

@@ -17,7 +17,7 @@ use crate::engine::animation::SyncMetric;
 use crate::engine::character::CharId;
 use crate::engine::error::EngineError;
 use crate::engine::events::{CallerKey, CallerRef, EffectCallback, Event, EventAction};
-use crate::engine::motion::Segment;
+use crate::engine::motion::{Path, Segment};
 use crate::engine::motion::Waypoint;
 use crate::engine::terminal::{Terminal, TerminalConfig};
 use crate::utils::geometry::{self, Coord};
@@ -33,15 +33,9 @@ thread_local! {
 /// reads monotonic time; the parity harness swaps in the virtual variant.
 #[derive(Debug)]
 pub enum Clock {
-    Real {
-        start: Instant,
-        wall_start: f64,
-    },
+    Real { start: Instant, wall_start: f64 },
     /// Virtual time advancing a fixed dt per emitted frame.
-    Virtual {
-        now: f64,
-        dt: f64,
-    },
+    Virtual { now: f64, dt: f64 },
 }
 
 impl Clock {
@@ -50,18 +44,11 @@ impl Clock {
             .duration_since(std::time::UNIX_EPOCH)
             .map(|d| d.as_secs_f64())
             .unwrap_or(0.0);
-        Clock::Real {
-            start: Instant::now(),
-            wall_start,
-        }
+        Clock::Real { start: Instant::now(), wall_start }
     }
 
     pub fn virtual_with_frame_rate(frame_rate: i64) -> Self {
-        let dt = if frame_rate > 0 {
-            1.0 / frame_rate as f64
-        } else {
-            1.0 / 60.0
-        };
+        let dt = if frame_rate > 0 { 1.0 / frame_rate as f64 } else { 1.0 / 60.0 };
         Clock::Virtual { now: 0.0, dt }
     }
 
@@ -93,24 +80,13 @@ impl Clock {
 /// are disjoint ownership trees, so the callback may freely recurse into
 /// engine calls with the provided ctx.
 pub trait EffectHooks {
-    fn dispatch_callback(
-        &mut self,
-        ctx: &mut EngineCtx,
-        character: CharId,
-        callback: &EffectCallback,
-    );
+    fn dispatch_callback(&mut self, ctx: &mut EngineCtx, character: CharId, callback: &EffectCallback);
 }
 
 /// Hooks implementation for engine-internal use (no effect callbacks registered).
 pub struct NoopHooks;
 impl EffectHooks for NoopHooks {
-    fn dispatch_callback(
-        &mut self,
-        _ctx: &mut EngineCtx,
-        _character: CharId,
-        _callback: &EffectCallback,
-    ) {
-    }
+    fn dispatch_callback(&mut self, _ctx: &mut EngineCtx, _character: CharId, _callback: &EffectCallback) {}
 }
 
 pub struct EngineCtx {
@@ -122,21 +98,15 @@ pub struct EngineCtx {
     pub active_characters: ActiveCharacters,
     active_character_scratch: Vec<CharId>,
     pub preexisting_colors_present: bool,
-    /// Embedding-only final text layout. Ordinary CLI and transient gradients
-    /// retain their authored directions and smooth spectra by default.
+    /// Embedding-only final text layout; CLI gradients remain unchanged.
     pub final_text_bands: bool,
+    structured_output: bool,
     /// When Some, every event emission appends a trace line (test harness).
     pub event_log: Option<Vec<String>>,
-    structured_output: bool,
 }
 
 impl EngineCtx {
-    pub fn new(
-        input_data: &str,
-        config: TerminalConfig,
-        rng: Rng,
-        clock: Clock,
-    ) -> Result<Self, EngineError> {
+    pub fn new(input_data: &str, config: TerminalConfig, rng: Rng, clock: Clock) -> Result<Self, EngineError> {
         let terminal = Terminal::new(input_data, config)?;
         let preexisting_colors_present = terminal.input_characters.iter().any(|&id| {
             let ch = &terminal.arena[id.0 as usize];
@@ -150,8 +120,8 @@ impl EngineCtx {
             active_character_scratch: Vec::new(),
             preexisting_colors_present,
             final_text_bands: false,
-            event_log: None,
             structured_output: false,
+            event_log: None,
         })
     }
 
@@ -193,10 +163,7 @@ impl EngineCtx {
     /// false lets hot emission sites skip building the CallerKey entirely.
     #[inline]
     fn observes_event(&self, id: CharId, event: Event) -> bool {
-        self.event_log.is_some()
-            || self.terminal.arena[id.0 as usize]
-                .event_handler
-                .subscribes(event)
+        self.event_log.is_some() || self.terminal.arena[id.0 as usize].event_handler.subscribes(event)
     }
 
     /// Execute all actions registered for (event, caller) on `id`, in
@@ -225,14 +192,12 @@ impl EngineCtx {
                 CallerRef::Waypoint(wp) => format!("wp:{}", wp.waypoint_id),
                 CallerRef::Scene(sid) => format!("scene:{sid}"),
             };
-            self.event_log.as_mut().unwrap().push(format!(
-                "EVENT char={character_id} {event_name} caller={caller_label}"
-            ));
+            self.event_log
+                .as_mut()
+                .unwrap()
+                .push(format!("EVENT char={character_id} {event_name} caller={caller_label}"));
         }
-        let Some(entry_index) = self.terminal.arena[id.0 as usize]
-            .event_handler
-            .actions_index(event, caller)
-        else {
+        let Some(entry_index) = self.terminal.arena[id.0 as usize].event_handler.actions_index(event, caller) else {
             return;
         };
         let mut action_index = 0;
@@ -249,9 +214,7 @@ impl EngineCtx {
                 EventAction::ActivatePath(path_id) => self.activate_path(hooks, id, &path_id),
                 EventAction::ActivateScene(scene_id) => self.activate_scene(hooks, id, &scene_id),
                 EventAction::DeactivatePath(target) => {
-                    self.terminal.arena[id.0 as usize]
-                        .motion
-                        .deactivate_path(target.as_deref());
+                    self.terminal.arena[id.0 as usize].motion.deactivate_path(target.as_deref());
                 }
                 EventAction::DeactivateScene(target) => {
                     self.deactivate_scene(id, target.as_deref());
@@ -260,12 +223,7 @@ impl EngineCtx {
                     let ch = &mut self.terminal.arena[id.0 as usize];
                     let input_symbol = ch.input_symbol.clone();
                     let uses = ch.uses_input_preexisting_colors;
-                    ch.animation.set_appearance(
-                        &input_symbol,
-                        uses,
-                        Some(&input_symbol.clone()),
-                        None,
-                    );
+                    ch.animation.set_appearance(&input_symbol, uses, Some(&input_symbol.clone()), None);
                 }
                 EventAction::SetLayer(layer) => {
                     self.terminal.arena[id.0 as usize].layer = layer;
@@ -319,9 +277,7 @@ impl EngineCtx {
                 _ => {}
             }
         }
-        self.terminal.arena[id.0 as usize]
-            .event_handler
-            .push(event, caller, action)
+        self.terminal.arena[id.0 as usize].event_handler.push(event, caller, action)
     }
 
     // ------------------------------------------------------------------
@@ -332,42 +288,30 @@ impl EngineCtx {
     pub fn activate_path(&mut self, hooks: &mut dyn EffectHooks, id: CharId, path_id: &str) {
         let (current_coord, first_waypoint) = {
             let ch = &self.terminal.arena[id.0 as usize];
-            let path = ch
-                .motion
-                .paths
-                .get(path_id)
-                .expect("activate_path: path not found");
-            assert!(
-                !path.waypoints.is_empty(),
-                "activate_path: empty path {path_id}"
-            );
+            let path = ch.motion.paths.get(path_id).expect("activate_path: path not found");
+            assert!(!path.waypoints.is_empty(), "activate_path: empty path {path_id}");
             (ch.motion.current_coord, path.waypoints[0].clone())
         };
         let distance_to_first_waypoint = match &first_waypoint.bezier_control {
-            Some(control) => {
-                geometry::find_length_of_bezier_curve(current_coord, control, first_waypoint.coord)
-            }
+            Some(control) => geometry::find_length_of_bezier_curve(current_coord, control, first_waypoint.coord),
             None => geometry::find_length_of_line(current_coord, first_waypoint.coord, true),
         };
-        let new_origin_segment = Segment::new(
-            Waypoint {
-                waypoint_id: ORIGIN_WAYPOINT_ID.with(Rc::clone),
-                coord: current_coord,
-                bezier_control: None,
-            },
-            first_waypoint,
-            distance_to_first_waypoint,
-        );
+        let new_origin_segment = Segment::new(Path::ORIGIN, 0, distance_to_first_waypoint);
         let layer = {
             let ch = &mut self.terminal.arena[id.0 as usize];
             ch.motion.active_path = ch.motion.paths.shared_key(path_id);
             let path = ch.motion.paths.get_mut(path_id).unwrap();
+            path.origin_waypoint = Some(Waypoint {
+                waypoint_id: ORIGIN_WAYPOINT_ID.with(Rc::clone),
+                coord: current_coord,
+                bezier_control: None,
+            });
             path.total_distance += distance_to_first_waypoint;
             if let Some(origin) = &path.origin_segment {
                 path.total_distance -= origin.distance;
-                path.segments[0] = new_origin_segment.clone();
+                path.segments[0] = new_origin_segment;
             } else {
-                path.segments.insert(0, new_origin_segment.clone());
+                path.segments.insert(0, new_origin_segment);
             }
             path.origin_segment = Some(new_origin_segment);
             path.current_step = 0;
@@ -393,11 +337,8 @@ impl EngineCtx {
     /// The path's slot is resolved once and re-resolved after every emission,
     /// since only a reentrant action can move or drop it.
     fn path_step(&mut self, hooks: &mut dyn EffectHooks, id: CharId, path_id: &str) -> Coord {
-        let mut slot = self.terminal.arena[id.0 as usize]
-            .motion
-            .paths
-            .slot(path_id)
-            .expect("path_step: path removed mid-step");
+        let mut slot =
+            self.terminal.arena[id.0 as usize].motion.paths.slot(path_id).expect("path_step: path removed mid-step");
         macro_rules! path {
             () => {
                 self.terminal.arena[id.0 as usize].motion.paths.at(slot)
@@ -421,7 +362,7 @@ impl EngineCtx {
         let mut distance_to_travel = {
             let p = path_mut!();
             if p.max_steps == 0 || p.current_step >= p.max_steps || p.total_distance == 0.0 {
-                return p.segments.last().expect("path has no segments").end.coord;
+                return p.waypoint_at(p.segments.last().expect("path has no segments").end).coord;
             }
             p.current_step += 1;
             let ratio = p.current_step as f64 / p.max_steps as f64;
@@ -443,24 +384,18 @@ impl EngineCtx {
                     break;
                 }
                 let seg = &p.segments[i];
-                (
-                    seg.distance,
-                    seg.enter_event_triggered,
-                    seg.exit_event_triggered,
-                )
+                (seg.distance, seg.enter_event_triggered, seg.exit_event_triggered)
             };
             if distance_to_travel <= seg_distance {
                 active_segment_index = Some(i);
                 if !enter_triggered {
                     if self.observes_event(id, Event::SegmentEntered) {
-                        let seg_end_key = path!().segments[i].end.key();
+                        let seg_end_key = {
+                            let p = path!();
+                            p.waypoint_at(p.segments[i].end).key()
+                        };
                         path_mut!().segments[i].enter_event_triggered = true;
-                        self.handle_event(
-                            hooks,
-                            id,
-                            Event::SegmentEntered,
-                            CallerRef::Waypoint(&seg_end_key),
-                        );
+                        self.handle_event(hooks, id, Event::SegmentEntered, CallerRef::Waypoint(&seg_end_key));
                         resolve_slot!();
                     } else {
                         path_mut!().segments[i].enter_event_triggered = true;
@@ -477,25 +412,18 @@ impl EngineCtx {
                     seg.enter_event_triggered = true;
                     seg.exit_event_triggered = true;
                 } else {
-                    let seg_end_key = path!().segments[i].end.key();
+                    let seg_end_key = {
+                        let p = path!();
+                        p.waypoint_at(p.segments[i].end).key()
+                    };
                     if !enter_triggered {
                         path_mut!().segments[i].enter_event_triggered = true;
-                        self.handle_event(
-                            hooks,
-                            id,
-                            Event::SegmentEntered,
-                            CallerRef::Waypoint(&seg_end_key),
-                        );
+                        self.handle_event(hooks, id, Event::SegmentEntered, CallerRef::Waypoint(&seg_end_key));
                         resolve_slot!();
                     }
                     if !exit_triggered {
                         path_mut!().segments[i].exit_event_triggered = true;
-                        self.handle_event(
-                            hooks,
-                            id,
-                            Event::SegmentExited,
-                            CallerRef::Waypoint(&seg_end_key),
-                        );
+                        self.handle_event(hooks, id, Event::SegmentExited, CallerRef::Waypoint(&seg_end_key));
                         resolve_slot!();
                     }
                 }
@@ -524,11 +452,11 @@ impl EngineCtx {
         } else {
             (distance_to_travel / seg_distance).min(1.0)
         };
-        match &seg.end.bezier_control {
-            Some(control) => {
-                geometry::find_coord_on_bezier_curve(seg.start.coord, control, seg.end.coord, t)
-            }
-            None => geometry::find_coord_on_line(seg.start.coord, seg.end.coord, t),
+        let start = p.waypoint_at(seg.start);
+        let end = p.waypoint_at(seg.end);
+        match &end.bezier_control {
+            Some(control) => geometry::find_coord_on_bezier_curve(start.coord, control, end.coord, t),
+            None => geometry::find_coord_on_line(start.coord, end.coord, t),
         }
     }
 
@@ -541,9 +469,7 @@ impl EngineCtx {
         let Some(path_id) = ({
             let motion = &self.terminal.arena[id.0 as usize].motion;
             match &motion.active_path {
-                Some(pid) if !motion.paths.get(pid).is_none_or(|p| p.segments.is_empty()) => {
-                    Some(pid.clone())
-                }
+                Some(pid) if !motion.paths.get(pid).is_none_or(|p| p.segments.is_empty()) => Some(pid.clone()),
                 _ => None,
             }
         }) else {
@@ -559,31 +485,15 @@ impl EngineCtx {
             .active_path
             .clone()
             .expect("active path cleared mid-move (would be an upstream crash)");
-        let slot = self.terminal.arena[id.0 as usize]
-            .motion
-            .paths
-            .slot(&active_path_id)
-            .expect("active path missing");
+        let slot = self.terminal.arena[id.0 as usize].motion.paths.slot(&active_path_id).expect("active path missing");
         let (current_step, max_steps, hold_time, hold_time_remaining, loop_, segment_count) = {
             let p = self.terminal.arena[id.0 as usize].motion.paths.at(slot);
-            (
-                p.current_step,
-                p.max_steps,
-                p.hold_time,
-                p.hold_time_remaining,
-                p.loop_,
-                p.segments.len(),
-            )
+            (p.current_step, p.max_steps, p.hold_time, p.hold_time_remaining, p.loop_, p.segments.len())
         };
         if current_step == max_steps {
             if hold_time != 0 && hold_time_remaining == hold_time {
                 if self.observes_event(id, Event::PathHolding) {
-                    self.handle_event(
-                        hooks,
-                        id,
-                        Event::PathHolding,
-                        CallerRef::Path(&active_path_id),
-                    );
+                    self.handle_event(hooks, id, Event::PathHolding, CallerRef::Path(&active_path_id));
                 }
                 self.terminal.arena[id.0 as usize]
                     .motion
@@ -594,17 +504,11 @@ impl EngineCtx {
                 return;
             }
             if hold_time_remaining != 0 {
-                self.terminal.arena[id.0 as usize]
-                    .motion
-                    .paths
-                    .at_mut(slot)
-                    .hold_time_remaining -= 1;
+                self.terminal.arena[id.0 as usize].motion.paths.at_mut(slot).hold_time_remaining -= 1;
                 return;
             }
             if loop_ && segment_count > 1 {
-                self.terminal.arena[id.0 as usize]
-                    .motion
-                    .deactivate_path(Some(&active_path_id));
+                self.terminal.arena[id.0 as usize].motion.deactivate_path(Some(&active_path_id));
                 self.activate_path(hooks, id, &active_path_id);
             } else {
                 {
@@ -613,12 +517,7 @@ impl EngineCtx {
                     motion.deactivate_path(Some(&active_path_id));
                 }
                 if self.observes_event(id, Event::PathComplete) {
-                    self.handle_event(
-                        hooks,
-                        id,
-                        Event::PathComplete,
-                        CallerRef::Path(&active_path_id),
-                    );
+                    self.handle_event(hooks, id, Event::PathComplete, CallerRef::Path(&active_path_id));
                 }
             }
         }
@@ -705,10 +604,7 @@ impl EngineCtx {
         };
 
         let (sync, ease) = {
-            let scene = self.terminal.arena[id.0 as usize]
-                .animation
-                .scenes
-                .at(scene_slot);
+            let scene = self.terminal.arena[id.0 as usize].animation.scenes.at(scene_slot);
             (scene.sync, scene.ease)
         };
 
@@ -731,12 +627,7 @@ impl EngineCtx {
             let ch = &self.terminal.arena[id.0 as usize];
             ch.motion.active_path.as_ref().map(|pid| {
                 let p = ch.motion.paths.get(pid).expect("active path missing");
-                (
-                    p.current_step,
-                    p.max_steps,
-                    p.total_distance,
-                    p.last_distance_reached,
-                )
+                (p.current_step, p.max_steps, p.total_distance, p.last_distance_reached)
             })
         };
         let ch = &mut self.terminal.arena[id.0 as usize];
@@ -745,10 +636,8 @@ impl EngineCtx {
             None => {
                 // no active path: jump to final frame and force-complete
                 let last = *scene.frames.back().unwrap();
-                ch.animation.current_character_visual =
-                    scene.all_frames[last].character_visual.clone();
-                let drained: Vec<usize> = scene.frames.drain(..).collect();
-                scene.played_frames.extend(drained);
+                ch.animation.current_character_visual = scene.all_frames[last].character_visual.clone();
+                scene.played_frames.append(&mut scene.frames);
             }
             Some((current_step, max_steps, total_distance, last_distance_reached)) => {
                 let final_frame_index = scene.frames.len() as i64 - 1;
@@ -765,19 +654,13 @@ impl EngineCtx {
                     .min(final_frame_index)
                     .max(0);
                 let frame = scene.frames[frame_index as usize];
-                ch.animation.current_character_visual =
-                    scene.all_frames[frame].character_visual.clone();
+                ch.animation.current_character_visual = scene.all_frames[frame].character_visual.clone();
             }
         }
     }
 
     /// Animation._step_eased_scene (+ _ease_animation).
-    fn step_eased_scene(
-        &mut self,
-        id: CharId,
-        scene_slot: usize,
-        ease: crate::utils::easing::Easing,
-    ) {
+    fn step_eased_scene(&mut self, id: CharId, scene_slot: usize, ease: crate::utils::easing::Easing) {
         let ch = &mut self.terminal.arena[id.0 as usize];
         let scene = ch.animation.scenes.at_mut(scene_slot);
         let elapsed_step_ratio = scene.easing_current_step as f64 / scene.easing_total_steps as f64;
@@ -794,20 +677,14 @@ impl EngineCtx {
             if scene.is_looping {
                 scene.easing_current_step = 0;
             } else {
-                let drained: Vec<usize> = scene.frames.drain(..).collect();
-                scene.played_frames.extend(drained);
+                scene.played_frames.append(&mut scene.frames);
             }
         }
     }
 
     /// Animation._complete_scene_if_finished: fires SCENE_COMPLETE every tick
     /// for looping scenes, faithfully.
-    fn complete_scene_if_finished(
-        &mut self,
-        hooks: &mut dyn EffectHooks,
-        id: CharId,
-        scene_slot: usize,
-    ) {
+    fn complete_scene_if_finished(&mut self, hooks: &mut dyn EffectHooks, id: CharId, scene_slot: usize) {
         {
             // The stepping above cannot clear active_scene, so the slot still
             // holds it and active_scene_is_complete reduces to its scene test.
@@ -826,12 +703,7 @@ impl EngineCtx {
             }
         }
         if self.observes_event(id, Event::SceneComplete) {
-            let scene_id = Rc::clone(
-                self.terminal.arena[id.0 as usize]
-                    .animation
-                    .scenes
-                    .key_at(scene_slot),
-            );
+            let scene_id = Rc::clone(self.terminal.arena[id.0 as usize].animation.scenes.key_at(scene_slot));
             self.handle_event(hooks, id, Event::SceneComplete, CallerRef::Scene(&scene_id));
         }
     }
@@ -859,8 +731,7 @@ impl EngineCtx {
         self.active_character_scratch = snapshot;
 
         let arena = &self.terminal.arena;
-        self.active_characters
-            .retain(|id| arena[id.0 as usize].is_active());
+        self.active_characters.retain(|id| arena[id.0 as usize].is_active());
     }
 
     /// BaseEffectIterator.frame: enforce framerate (real clock only), then the

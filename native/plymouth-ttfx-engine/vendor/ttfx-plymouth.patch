@@ -1,0 +1,953 @@
+--- a/src/effects/beams.rs
++++ b/src/effects/beams.rs
+@@ -189,14 +189,8 @@
+         let final_gradient =
+             Gradient::new(&self.config.final_gradient_stops, &self.config.final_gradient_steps, false, false)
+                 .map_err(EngineError::Other)?;
+-        let final_gradient_mapping = final_gradient
+-            .build_coordinate_color_mapping(
+-                ctx.terminal.canvas.text_bottom,
+-                ctx.terminal.canvas.text_top,
+-                ctx.terminal.canvas.text_left,
+-                ctx.terminal.canvas.text_right,
+-                self.config.final_gradient_direction,
+-            )
++        let final_gradient_mapping = ctx
++            .final_gradient_mapping(&final_gradient, self.config.final_gradient_direction)
+             .map_err(EngineError::Other)?;
+         let dynamic = ctx.terminal.config.existing_color_handling == ExistingColorHandling::Dynamic;
+         let characters =
+--- a/src/effects/binarypath.rs
++++ b/src/effects/binarypath.rs
+@@ -126,14 +126,8 @@
+         let final_gradient =
+             Gradient::new(&self.config.final_gradient_stops, &self.config.final_gradient_steps, false, false)
+                 .map_err(EngineError::Other)?;
+-        let final_gradient_mapping = final_gradient
+-            .build_coordinate_color_mapping(
+-                ctx.terminal.canvas.text_bottom,
+-                ctx.terminal.canvas.text_top,
+-                ctx.terminal.canvas.text_left,
+-                ctx.terminal.canvas.text_right,
+-                self.config.final_gradient_direction,
+-            )
++        let final_gradient_mapping = ctx
++            .final_gradient_mapping(&final_gradient, self.config.final_gradient_direction)
+             .map_err(EngineError::Other)?;
+         let dynamic = ctx.terminal.config.existing_color_handling == ExistingColorHandling::Dynamic;
+         let characters = {
+--- a/src/effects/blackhole.rs
++++ b/src/effects/blackhole.rs
+@@ -534,14 +534,8 @@
+         let final_gradient =
+             Gradient::new(&self.config.final_gradient_stops, &self.config.final_gradient_steps, false, false)
+                 .map_err(EngineError::Other)?;
+-        let final_gradient_mapping = final_gradient
+-            .build_coordinate_color_mapping(
+-                ctx.terminal.canvas.text_bottom,
+-                ctx.terminal.canvas.text_top,
+-                ctx.terminal.canvas.text_left,
+-                ctx.terminal.canvas.text_right,
+-                self.config.final_gradient_direction,
+-            )
++        let final_gradient_mapping = ctx
++            .final_gradient_mapping(&final_gradient, self.config.final_gradient_direction)
+             .map_err(EngineError::Other)?;
+         let characters = {
+             let filter = CharacterFilter::default();
+--- a/src/effects/bouncyballs.rs
++++ b/src/effects/bouncyballs.rs
+@@ -88,14 +88,8 @@
+         let final_gradient =
+             Gradient::new(&self.config.final_gradient_stops, &self.config.final_gradient_steps, false, false)
+                 .map_err(EngineError::Other)?;
+-        let final_gradient_mapping = final_gradient
+-            .build_coordinate_color_mapping(
+-                ctx.terminal.canvas.text_bottom,
+-                ctx.terminal.canvas.text_top,
+-                ctx.terminal.canvas.text_left,
+-                ctx.terminal.canvas.text_right,
+-                self.config.final_gradient_direction,
+-            )
++        let final_gradient_mapping = ctx
++            .final_gradient_mapping(&final_gradient, self.config.final_gradient_direction)
+             .map_err(EngineError::Other)?;
+ 
+         let dynamic = ctx.terminal.config.existing_color_handling == ExistingColorHandling::Dynamic;
+--- a/src/effects/bubbles.rs
++++ b/src/effects/bubbles.rs
+@@ -309,14 +309,8 @@
+         let final_gradient =
+             Gradient::new(&self.config.final_gradient_stops, &self.config.final_gradient_steps, false, false)
+                 .map_err(EngineError::Other)?;
+-        let final_gradient_mapping = final_gradient
+-            .build_coordinate_color_mapping(
+-                ctx.terminal.canvas.text_bottom,
+-                ctx.terminal.canvas.text_top,
+-                ctx.terminal.canvas.text_left,
+-                ctx.terminal.canvas.text_right,
+-                self.config.final_gradient_direction,
+-            )
++        let final_gradient_mapping = ctx
++            .final_gradient_mapping(&final_gradient, self.config.final_gradient_direction)
+             .map_err(EngineError::Other)?;
+         let dynamic = ctx.terminal.config.existing_color_handling == ExistingColorHandling::Dynamic;
+         let characters = {
+--- a/src/effects/burn.rs
++++ b/src/effects/burn.rs
+@@ -222,14 +222,8 @@
+         let final_gradient =
+             Gradient::new(&self.config.final_gradient_stops, &self.config.final_gradient_steps, false, false)
+                 .map_err(EngineError::Other)?;
+-        let final_gradient_mapping = final_gradient
+-            .build_coordinate_color_mapping(
+-                ctx.terminal.canvas.text_bottom,
+-                ctx.terminal.canvas.text_top,
+-                ctx.terminal.canvas.text_left,
+-                ctx.terminal.canvas.text_right,
+-                self.config.final_gradient_direction,
+-            )
++        let final_gradient_mapping = ctx
++            .final_gradient_mapping(&final_gradient, self.config.final_gradient_direction)
+             .map_err(EngineError::Other)?;
+         let characters = {
+             let filter = CharacterFilter::default();
+--- a/src/effects/colorshift.rs
++++ b/src/effects/colorshift.rs
+@@ -104,14 +104,8 @@
+         let final_gradient =
+             Gradient::new(&self.config.final_gradient_stops, &self.config.final_gradient_steps, false, false)
+                 .map_err(EngineError::Other)?;
+-        let final_gradient_mapping = final_gradient
+-            .build_coordinate_color_mapping(
+-                ctx.terminal.canvas.text_bottom,
+-                ctx.terminal.canvas.text_top,
+-                ctx.terminal.canvas.text_left,
+-                ctx.terminal.canvas.text_right,
+-                self.config.final_gradient_direction,
+-            )
++        let final_gradient_mapping = ctx
++            .final_gradient_mapping(&final_gradient, self.config.final_gradient_direction)
+             .map_err(EngineError::Other)?;
+         let characters = {
+             let filter = CharacterFilter::default();
+--- a/src/effects/crumble.rs
++++ b/src/effects/crumble.rs
+@@ -85,14 +85,8 @@
+         let final_gradient =
+             Gradient::new(&self.config.final_gradient_stops, &self.config.final_gradient_steps, false, false)
+                 .map_err(EngineError::Other)?;
+-        let final_gradient_mapping = final_gradient
+-            .build_coordinate_color_mapping(
+-                ctx.terminal.canvas.text_bottom,
+-                ctx.terminal.canvas.text_top,
+-                ctx.terminal.canvas.text_left,
+-                ctx.terminal.canvas.text_right,
+-                self.config.final_gradient_direction,
+-            )
++        let final_gradient_mapping = ctx
++            .final_gradient_mapping(&final_gradient, self.config.final_gradient_direction)
+             .map_err(EngineError::Other)?;
+ 
+         let dynamic = ctx.terminal.config.existing_color_handling == ExistingColorHandling::Dynamic;
+--- a/src/effects/decrypt.rs
++++ b/src/effects/decrypt.rs
+@@ -295,14 +295,8 @@
+         let final_gradient =
+             Gradient::new(&self.config.final_gradient_stops, &self.config.final_gradient_steps, false, false)
+                 .map_err(EngineError::Other)?;
+-        let final_gradient_mapping = final_gradient
+-            .build_coordinate_color_mapping(
+-                ctx.terminal.canvas.text_bottom,
+-                ctx.terminal.canvas.text_top,
+-                ctx.terminal.canvas.text_left,
+-                ctx.terminal.canvas.text_right,
+-                self.config.final_gradient_direction,
+-            )
++        let final_gradient_mapping = ctx
++            .final_gradient_mapping(&final_gradient, self.config.final_gradient_direction)
+             .map_err(EngineError::Other)?;
+         let dynamic = ctx.terminal.config.existing_color_handling == ExistingColorHandling::Dynamic;
+         let characters = {
+--- a/src/effects/errorcorrect.rs
++++ b/src/effects/errorcorrect.rs
+@@ -325,14 +325,8 @@
+         let final_gradient =
+             Gradient::new(&self.config.final_gradient_stops, &self.config.final_gradient_steps, false, false)
+                 .map_err(EngineError::Other)?;
+-        let final_gradient_mapping = final_gradient
+-            .build_coordinate_color_mapping(
+-                ctx.terminal.canvas.text_bottom,
+-                ctx.terminal.canvas.text_top,
+-                ctx.terminal.canvas.text_left,
+-                ctx.terminal.canvas.text_right,
+-                self.config.final_gradient_direction,
+-            )
++        let final_gradient_mapping = ctx
++            .final_gradient_mapping(&final_gradient, self.config.final_gradient_direction)
+             .map_err(EngineError::Other)?;
+ 
+         let dynamic = ctx.terminal.config.existing_color_handling == ExistingColorHandling::Dynamic;
+--- a/src/effects/expand.rs
++++ b/src/effects/expand.rs
+@@ -61,14 +61,8 @@
+         let final_gradient =
+             Gradient::new(&self.config.final_gradient_stops, &self.config.final_gradient_steps, false, false)
+                 .map_err(EngineError::Other)?;
+-        let final_gradient_mapping = final_gradient
+-            .build_coordinate_color_mapping(
+-                ctx.terminal.canvas.text_bottom,
+-                ctx.terminal.canvas.text_top,
+-                ctx.terminal.canvas.text_left,
+-                ctx.terminal.canvas.text_right,
+-                self.config.final_gradient_direction,
+-            )
++        let final_gradient_mapping = ctx
++            .final_gradient_mapping(&final_gradient, self.config.final_gradient_direction)
+             .map_err(EngineError::Other)?;
+ 
+         let dynamic = ctx.terminal.config.existing_color_handling == ExistingColorHandling::Dynamic;
+--- a/src/effects/fireworks.rs
++++ b/src/effects/fireworks.rs
+@@ -212,14 +212,8 @@
+         let final_gradient =
+             Gradient::new(&self.config.final_gradient_stops, &self.config.final_gradient_steps, false, false)
+                 .map_err(EngineError::Other)?;
+-        let final_gradient_mapping = final_gradient
+-            .build_coordinate_color_mapping(
+-                ctx.terminal.canvas.text_bottom,
+-                ctx.terminal.canvas.text_top,
+-                ctx.terminal.canvas.text_left,
+-                ctx.terminal.canvas.text_right,
+-                self.config.final_gradient_direction,
+-            )
++        let final_gradient_mapping = ctx
++            .final_gradient_mapping(&final_gradient, self.config.final_gradient_direction)
+             .map_err(EngineError::Other)?;
+         let dynamic = ctx.terminal.config.existing_color_handling == ExistingColorHandling::Dynamic;
+         let characters = {
+--- a/src/effects/highlight.rs
++++ b/src/effects/highlight.rs
+@@ -74,14 +74,8 @@
+         let final_gradient =
+             Gradient::new(&self.config.final_gradient_stops, &self.config.final_gradient_steps, false, false)
+                 .map_err(EngineError::Other)?;
+-        let final_gradient_mapping = final_gradient
+-            .build_coordinate_color_mapping(
+-                ctx.terminal.canvas.text_bottom,
+-                ctx.terminal.canvas.text_top,
+-                ctx.terminal.canvas.text_left,
+-                ctx.terminal.canvas.text_right,
+-                self.config.final_gradient_direction,
+-            )
++        let final_gradient_mapping = ctx
++            .final_gradient_mapping(&final_gradient, self.config.final_gradient_direction)
+             .map_err(EngineError::Other)?;
+ 
+         let dynamic = ctx.terminal.config.existing_color_handling == ExistingColorHandling::Dynamic;
+--- a/src/effects/laseretch.rs
++++ b/src/effects/laseretch.rs
+@@ -308,14 +308,8 @@
+         let final_fg_gradient =
+             Gradient::new(&self.config.final_gradient_stops, &self.config.final_gradient_steps, false, false)
+                 .map_err(EngineError::Other)?;
+-        let final_gradient_mapping = final_fg_gradient
+-            .build_coordinate_color_mapping(
+-                ctx.terminal.canvas.text_bottom,
+-                ctx.terminal.canvas.text_top,
+-                ctx.terminal.canvas.text_left,
+-                ctx.terminal.canvas.text_right,
+-                self.config.final_gradient_direction,
+-            )
++        let final_gradient_mapping = ctx
++            .final_gradient_mapping(&final_fg_gradient, self.config.final_gradient_direction)
+             .map_err(EngineError::Other)?;
+         let dynamic = ctx.terminal.config.existing_color_handling == ExistingColorHandling::Dynamic;
+         let characters = {
+--- a/src/effects/matrix.rs
++++ b/src/effects/matrix.rs
+@@ -414,14 +414,8 @@
+         let final_gradient =
+             Gradient::new(&self.config.final_gradient_stops, &self.config.final_gradient_steps, false, false)
+                 .map_err(EngineError::Other)?;
+-        let final_gradient_mapping = final_gradient
+-            .build_coordinate_color_mapping(
+-                ctx.terminal.canvas.text_bottom,
+-                ctx.terminal.canvas.text_top,
+-                ctx.terminal.canvas.text_left,
+-                ctx.terminal.canvas.text_right,
+-                self.config.final_gradient_direction,
+-            )
++        let final_gradient_mapping = ctx
++            .final_gradient_mapping(&final_gradient, self.config.final_gradient_direction)
+             .map_err(EngineError::Other)?;
+         let dynamic = ctx.terminal.config.existing_color_handling == ExistingColorHandling::Dynamic;
+         let characters =
+--- a/src/effects/middleout.rs
++++ b/src/effects/middleout.rs
+@@ -106,14 +106,8 @@
+         let final_gradient =
+             Gradient::new(&self.config.final_gradient_stops, &self.config.final_gradient_steps, false, false)
+                 .map_err(EngineError::Other)?;
+-        let final_gradient_mapping = final_gradient
+-            .build_coordinate_color_mapping(
+-                ctx.terminal.canvas.text_bottom,
+-                ctx.terminal.canvas.text_top,
+-                ctx.terminal.canvas.text_left,
+-                ctx.terminal.canvas.text_right,
+-                self.config.final_gradient_direction,
+-            )
++        let final_gradient_mapping = ctx
++            .final_gradient_mapping(&final_gradient, self.config.final_gradient_direction)
+             .map_err(EngineError::Other)?;
+         let dynamic = ctx.terminal.config.existing_color_handling == ExistingColorHandling::Dynamic;
+         let characters = {
+--- a/src/effects/orbittingvolley.rs
++++ b/src/effects/orbittingvolley.rs
+@@ -197,14 +197,8 @@
+         let final_gradient =
+             Gradient::new(&self.config.final_gradient_stops, &self.config.final_gradient_steps, false, false)
+                 .map_err(EngineError::Other)?;
+-        let final_gradient_coordinate_map = final_gradient
+-            .build_coordinate_color_mapping(
+-                ctx.terminal.canvas.text_bottom,
+-                ctx.terminal.canvas.text_top,
+-                ctx.terminal.canvas.text_left,
+-                ctx.terminal.canvas.text_right,
+-                self.config.final_gradient_direction,
+-            )
++        let final_gradient_coordinate_map = ctx
++            .final_gradient_mapping(&final_gradient, self.config.final_gradient_direction)
+             .map_err(EngineError::Other)?;
+         self.launcher_gradient_coordinate_map = final_gradient
+             .build_coordinate_color_mapping(
+--- a/src/effects/overflow.rs
++++ b/src/effects/overflow.rs
+@@ -120,14 +120,8 @@
+         let final_gradient =
+             Gradient::new(&self.config.final_gradient_stops, &self.config.final_gradient_steps, false, false)
+                 .map_err(EngineError::Other)?;
+-        let final_gradient_mapping = final_gradient
+-            .build_coordinate_color_mapping(
+-                ctx.terminal.canvas.text_bottom,
+-                ctx.terminal.canvas.text_top,
+-                ctx.terminal.canvas.text_left,
+-                ctx.terminal.canvas.text_right,
+-                self.config.final_gradient_direction,
+-            )
++        let final_gradient_mapping = ctx
++            .final_gradient_mapping(&final_gradient, self.config.final_gradient_direction)
+             .map_err(EngineError::Other)?;
+         let fills_filter =
+             CharacterFilter { inner_fill_chars: true, outer_fill_chars: true, ..Default::default() };
+--- a/src/effects/pour.rs
++++ b/src/effects/pour.rs
+@@ -114,14 +114,8 @@
+         let final_gradient =
+             Gradient::new(&self.config.final_gradient_stops, &self.config.final_gradient_steps, false, false)
+                 .map_err(EngineError::Other)?;
+-        let final_gradient_mapping = final_gradient
+-            .build_coordinate_color_mapping(
+-                ctx.terminal.canvas.text_bottom,
+-                ctx.terminal.canvas.text_top,
+-                ctx.terminal.canvas.text_left,
+-                ctx.terminal.canvas.text_right,
+-                self.config.final_gradient_direction,
+-            )
++        let final_gradient_mapping = ctx
++            .final_gradient_mapping(&final_gradient, self.config.final_gradient_direction)
+             .map_err(EngineError::Other)?;
+         let dynamic = ctx.terminal.config.existing_color_handling == ExistingColorHandling::Dynamic;
+         let characters = {
+--- a/src/effects/print_effect.rs
++++ b/src/effects/print_effect.rs
+@@ -245,14 +245,8 @@
+         let final_gradient =
+             Gradient::new(&self.config.final_gradient_stops, &self.config.final_gradient_steps, false, false)
+                 .map_err(EngineError::Other)?;
+-        let final_gradient_mapping = final_gradient
+-            .build_coordinate_color_mapping(
+-                ctx.terminal.canvas.text_bottom,
+-                ctx.terminal.canvas.text_top,
+-                ctx.terminal.canvas.text_left,
+-                ctx.terminal.canvas.text_right,
+-                self.config.final_gradient_direction,
+-            )
++        let final_gradient_mapping = ctx
++            .final_gradient_mapping(&final_gradient, self.config.final_gradient_direction)
+             .map_err(EngineError::Other)?;
+         let dynamic = ctx.terminal.config.existing_color_handling == ExistingColorHandling::Dynamic;
+         let filter = CharacterFilter { inner_fill_chars: true, outer_fill_chars: true, ..Default::default() };
+--- a/src/effects/rain.rs
++++ b/src/effects/rain.rs
+@@ -81,14 +81,8 @@
+         let final_gradient =
+             Gradient::new(&self.config.final_gradient_stops, &self.config.final_gradient_steps, false, false)
+                 .map_err(EngineError::Other)?;
+-        let final_gradient_mapping = final_gradient
+-            .build_coordinate_color_mapping(
+-                ctx.terminal.canvas.text_bottom,
+-                ctx.terminal.canvas.text_top,
+-                ctx.terminal.canvas.text_left,
+-                ctx.terminal.canvas.text_right,
+-                self.config.final_gradient_direction,
+-            )
++        let final_gradient_mapping = ctx
++            .final_gradient_mapping(&final_gradient, self.config.final_gradient_direction)
+             .map_err(EngineError::Other)?;
+ 
+         let dynamic = ctx.terminal.config.existing_color_handling == ExistingColorHandling::Dynamic;
+--- a/src/effects/random_sequence.rs
++++ b/src/effects/random_sequence.rs
+@@ -75,14 +75,8 @@
+         let final_gradient =
+             Gradient::new(&self.config.final_gradient_stops, &self.config.final_gradient_steps, false, false)
+                 .map_err(EngineError::Other)?;
+-        let final_gradient_mapping = final_gradient
+-            .build_coordinate_color_mapping(
+-                ctx.terminal.canvas.text_bottom,
+-                ctx.terminal.canvas.text_top,
+-                ctx.terminal.canvas.text_left,
+-                ctx.terminal.canvas.text_right,
+-                self.config.final_gradient_direction,
+-            )
++        let final_gradient_mapping = ctx
++            .final_gradient_mapping(&final_gradient, self.config.final_gradient_direction)
+             .map_err(EngineError::Other)?;
+ 
+         let dynamic = ctx.terminal.config.existing_color_handling == ExistingColorHandling::Dynamic;
+--- a/src/effects/rings.rs
++++ b/src/effects/rings.rs
+@@ -337,14 +337,8 @@
+         let final_gradient =
+             Gradient::new(&self.config.final_gradient_stops, &self.config.final_gradient_steps, false, false)
+                 .map_err(EngineError::Other)?;
+-        let final_gradient_mapping = final_gradient
+-            .build_coordinate_color_mapping(
+-                ctx.terminal.canvas.text_bottom,
+-                ctx.terminal.canvas.text_top,
+-                ctx.terminal.canvas.text_left,
+-                ctx.terminal.canvas.text_right,
+-                self.config.final_gradient_direction,
+-            )
++        let final_gradient_mapping = ctx
++            .final_gradient_mapping(&final_gradient, self.config.final_gradient_direction)
+             .map_err(EngineError::Other)?;
+         let dynamic = ctx.terminal.config.existing_color_handling == ExistingColorHandling::Dynamic;
+         let characters = {
+--- a/src/effects/scattered.rs
++++ b/src/effects/scattered.rs
+@@ -73,14 +73,8 @@
+         let final_gradient =
+             Gradient::new(&self.config.final_gradient_stops, &self.config.final_gradient_steps, false, false)
+                 .map_err(EngineError::Other)?;
+-        let final_gradient_mapping = final_gradient
+-            .build_coordinate_color_mapping(
+-                ctx.terminal.canvas.text_bottom,
+-                ctx.terminal.canvas.text_top,
+-                ctx.terminal.canvas.text_left,
+-                ctx.terminal.canvas.text_right,
+-                self.config.final_gradient_direction,
+-            )
++        let final_gradient_mapping = ctx
++            .final_gradient_mapping(&final_gradient, self.config.final_gradient_direction)
+             .map_err(EngineError::Other)?;
+ 
+         let dynamic = ctx.terminal.config.existing_color_handling == ExistingColorHandling::Dynamic;
+--- a/src/effects/slice.rs
++++ b/src/effects/slice.rs
+@@ -67,14 +67,8 @@
+         let final_gradient =
+             Gradient::new(&self.config.final_gradient_stops, &self.config.final_gradient_steps, false, false)
+                 .map_err(EngineError::Other)?;
+-        let final_gradient_mapping = final_gradient
+-            .build_coordinate_color_mapping(
+-                ctx.terminal.canvas.text_bottom,
+-                ctx.terminal.canvas.text_top,
+-                ctx.terminal.canvas.text_left,
+-                ctx.terminal.canvas.text_right,
+-                self.config.final_gradient_direction,
+-            )
++        let final_gradient_mapping = ctx
++            .final_gradient_mapping(&final_gradient, self.config.final_gradient_direction)
+             .map_err(EngineError::Other)?;
+ 
+         let dynamic = ctx.terminal.config.existing_color_handling == ExistingColorHandling::Dynamic;
+--- a/src/effects/slide.rs
++++ b/src/effects/slide.rs
+@@ -110,14 +110,8 @@
+         let final_gradient =
+             Gradient::new(&self.config.final_gradient_stops, &self.config.final_gradient_steps, false, false)
+                 .map_err(EngineError::Other)?;
+-        let final_gradient_mapping = final_gradient
+-            .build_coordinate_color_mapping(
+-                ctx.terminal.canvas.text_bottom,
+-                ctx.terminal.canvas.text_top,
+-                ctx.terminal.canvas.text_left,
+-                ctx.terminal.canvas.text_right,
+-                self.config.final_gradient_direction,
+-            )
++        let final_gradient_mapping = ctx
++            .final_gradient_mapping(&final_gradient, self.config.final_gradient_direction)
+             .map_err(EngineError::Other)?;
+         let dynamic = ctx.terminal.config.existing_color_handling == ExistingColorHandling::Dynamic;
+         let characters = {
+--- a/src/effects/smoke.rs
++++ b/src/effects/smoke.rs
+@@ -94,14 +94,8 @@
+         let final_gradient =
+             Gradient::new(&self.config.final_gradient_stops, &self.config.final_gradient_steps, false, false)
+                 .map_err(EngineError::Other)?;
+-        let final_gradient_mapping = final_gradient
+-            .build_coordinate_color_mapping(
+-                ctx.terminal.canvas.text_bottom,
+-                ctx.terminal.canvas.text_top,
+-                ctx.terminal.canvas.text_left,
+-                ctx.terminal.canvas.text_right,
+-                self.config.final_gradient_direction,
+-            )
++        let final_gradient_mapping = ctx
++            .final_gradient_mapping(&final_gradient, self.config.final_gradient_direction)
+             .map_err(EngineError::Other)?;
+         let blk = Color::from_hex("000000").unwrap();
+         // Gradient(*smoke_gradient_stops, *final_gradient_stops[::-1], steps=(3, 4))
+--- a/src/effects/spotlights.rs
++++ b/src/effects/spotlights.rs
+@@ -264,14 +264,8 @@
+         let final_gradient =
+             Gradient::new(&self.config.final_gradient_stops, &self.config.final_gradient_steps, false, false)
+                 .map_err(EngineError::Other)?;
+-        let final_gradient_mapping = final_gradient
+-            .build_coordinate_color_mapping(
+-                ctx.terminal.canvas.text_bottom,
+-                ctx.terminal.canvas.text_top,
+-                ctx.terminal.canvas.text_left,
+-                ctx.terminal.canvas.text_right,
+-                self.config.final_gradient_direction,
+-            )
++        let final_gradient_mapping = ctx
++            .final_gradient_mapping(&final_gradient, self.config.final_gradient_direction)
+             .map_err(EngineError::Other)?;
+         let dynamic = ctx.terminal.config.existing_color_handling == ExistingColorHandling::Dynamic;
+         let characters = {
+--- a/src/effects/spray.rs
++++ b/src/effects/spray.rs
+@@ -108,14 +108,8 @@
+         let final_gradient =
+             Gradient::new(&self.config.final_gradient_stops, &self.config.final_gradient_steps, false, false)
+                 .map_err(EngineError::Other)?;
+-        let final_gradient_mapping = final_gradient
+-            .build_coordinate_color_mapping(
+-                ctx.terminal.canvas.text_bottom,
+-                ctx.terminal.canvas.text_top,
+-                ctx.terminal.canvas.text_left,
+-                ctx.terminal.canvas.text_right,
+-                self.config.final_gradient_direction,
+-            )
++        let final_gradient_mapping = ctx
++            .final_gradient_mapping(&final_gradient, self.config.final_gradient_direction)
+             .map_err(EngineError::Other)?;
+ 
+         let dynamic = ctx.terminal.config.existing_color_handling == ExistingColorHandling::Dynamic;
+--- a/src/effects/swarm.rs
++++ b/src/effects/swarm.rs
+@@ -131,14 +131,8 @@
+         let final_gradient =
+             Gradient::new(&self.config.final_gradient_stops, &self.config.final_gradient_steps, false, false)
+                 .map_err(EngineError::Other)?;
+-        let final_gradient_mapping = final_gradient
+-            .build_coordinate_color_mapping(
+-                ctx.terminal.canvas.text_bottom,
+-                ctx.terminal.canvas.text_top,
+-                ctx.terminal.canvas.text_left,
+-                ctx.terminal.canvas.text_right,
+-                self.config.final_gradient_direction,
+-            )
++        let final_gradient_mapping = ctx
++            .final_gradient_mapping(&final_gradient, self.config.final_gradient_direction)
+             .map_err(EngineError::Other)?;
+         let dynamic = ctx.terminal.config.existing_color_handling == ExistingColorHandling::Dynamic;
+         for &id in &characters {
+--- a/src/effects/sweep.rs
++++ b/src/effects/sweep.rs
+@@ -83,14 +83,8 @@
+         let final_fg_gradient =
+             Gradient::new(&self.config.final_gradient_stops, &self.config.final_gradient_steps, false, false)
+                 .map_err(EngineError::Other)?;
+-        let final_gradient_mapping = final_fg_gradient
+-            .build_coordinate_color_mapping(
+-                ctx.terminal.canvas.text_bottom,
+-                ctx.terminal.canvas.text_top,
+-                ctx.terminal.canvas.text_left,
+-                ctx.terminal.canvas.text_right,
+-                self.config.final_gradient_direction,
+-            )
++        let final_gradient_mapping = ctx
++            .final_gradient_mapping(&final_fg_gradient, self.config.final_gradient_direction)
+             .map_err(EngineError::Other)?;
+         let shades_of_gray: Vec<Color> = ["A0A0A0", "808080", "404040", "202020", "101010"]
+             .iter()
+--- a/src/effects/synthgrid.rs
++++ b/src/effects/synthgrid.rs
+@@ -277,14 +277,8 @@
+         let text_gradient =
+             Gradient::new(&self.config.text_gradient_stops, &self.config.text_gradient_steps, false, false)
+                 .map_err(EngineError::Other)?;
+-        let text_gradient_mapping = text_gradient
+-            .build_coordinate_color_mapping(
+-                ctx.terminal.canvas.text_bottom,
+-                ctx.terminal.canvas.text_top,
+-                ctx.terminal.canvas.text_left,
+-                ctx.terminal.canvas.text_right,
+-                self.config.text_gradient_direction,
+-            )
++        let text_gradient_mapping = ctx
++            .final_gradient_mapping(&text_gradient, self.config.text_gradient_direction)
+             .map_err(EngineError::Other)?;
+         let dynamic = ctx.terminal.config.existing_color_handling == ExistingColorHandling::Dynamic;
+         let characters =
+--- a/src/effects/thunderstorm.rs
++++ b/src/effects/thunderstorm.rs
+@@ -668,14 +668,8 @@
+         let final_gradient =
+             Gradient::new(&self.config.final_gradient_stops, &self.config.final_gradient_steps, false, false)
+                 .map_err(EngineError::Other)?;
+-        let final_gradient_mapping = final_gradient
+-            .build_coordinate_color_mapping(
+-                ctx.terminal.canvas.text_bottom,
+-                ctx.terminal.canvas.text_top,
+-                ctx.terminal.canvas.text_left,
+-                ctx.terminal.canvas.text_right,
+-                self.config.final_gradient_direction,
+-            )
++        let final_gradient_mapping = ctx
++            .final_gradient_mapping(&final_gradient, self.config.final_gradient_direction)
+             .map_err(EngineError::Other)?;
+         self.build_strike_characters(ctx, 200);
+ 
+--- a/src/effects/unstable.rs
++++ b/src/effects/unstable.rs
+@@ -104,14 +104,8 @@
+         let final_gradient =
+             Gradient::new(&self.config.final_gradient_stops, &self.config.final_gradient_steps, false, false)
+                 .map_err(EngineError::Other)?;
+-        let final_gradient_mapping = final_gradient
+-            .build_coordinate_color_mapping(
+-                ctx.terminal.canvas.text_bottom,
+-                ctx.terminal.canvas.text_top,
+-                ctx.terminal.canvas.text_left,
+-                ctx.terminal.canvas.text_right,
+-                self.config.final_gradient_direction,
+-            )
++        let final_gradient_mapping = ctx
++            .final_gradient_mapping(&final_gradient, self.config.final_gradient_direction)
+             .map_err(EngineError::Other)?;
+         let dynamic = ctx.terminal.config.existing_color_handling == ExistingColorHandling::Dynamic;
+         let characters = {
+--- a/src/effects/vhstape.rs
++++ b/src/effects/vhstape.rs
+@@ -475,14 +475,8 @@
+         let final_gradient =
+             Gradient::new(&self.config.final_gradient_stops, &self.config.final_gradient_steps, false, false)
+                 .map_err(EngineError::Other)?;
+-        let final_gradient_mapping = final_gradient
+-            .build_coordinate_color_mapping(
+-                ctx.terminal.canvas.text_bottom,
+-                ctx.terminal.canvas.text_top,
+-                ctx.terminal.canvas.text_left,
+-                ctx.terminal.canvas.text_right,
+-                self.config.final_gradient_direction,
+-            )
++        let final_gradient_mapping = ctx
++            .final_gradient_mapping(&final_gradient, self.config.final_gradient_direction)
+             .map_err(EngineError::Other)?;
+         let dynamic = ctx.terminal.config.existing_color_handling == ExistingColorHandling::Dynamic;
+         let characters = {
+--- a/src/effects/waves.rs
++++ b/src/effects/waves.rs
+@@ -100,14 +100,8 @@
+         let final_gradient =
+             Gradient::new(&self.config.final_gradient_stops, &self.config.final_gradient_steps, false, false)
+                 .map_err(EngineError::Other)?;
+-        let final_gradient_mapping = final_gradient
+-            .build_coordinate_color_mapping(
+-                ctx.terminal.canvas.text_bottom,
+-                ctx.terminal.canvas.text_top,
+-                ctx.terminal.canvas.text_left,
+-                ctx.terminal.canvas.text_right,
+-                self.config.final_gradient_direction,
+-            )
++        let final_gradient_mapping = ctx
++            .final_gradient_mapping(&final_gradient, self.config.final_gradient_direction)
+             .map_err(EngineError::Other)?;
+         let wave_gradient =
+             Gradient::new(&self.config.wave_gradient_stops, &self.config.wave_gradient_steps, false, false)
+--- a/src/effects/wipe.rs
++++ b/src/effects/wipe.rs
+@@ -78,14 +78,8 @@
+         let final_gradient =
+             Gradient::new(&self.config.final_gradient_stops, &self.config.final_gradient_steps, false, false)
+                 .map_err(EngineError::Other)?;
+-        let final_gradient_mapping = final_gradient
+-            .build_coordinate_color_mapping(
+-                ctx.terminal.canvas.text_bottom,
+-                ctx.terminal.canvas.text_top,
+-                ctx.terminal.canvas.text_left,
+-                ctx.terminal.canvas.text_right,
+-                self.config.final_gradient_direction,
+-            )
++        let final_gradient_mapping = ctx
++            .final_gradient_mapping(&final_gradient, self.config.final_gradient_direction)
+             .map_err(EngineError::Other)?;
+ 
+         let dynamic = ctx.terminal.config.existing_color_handling == ExistingColorHandling::Dynamic;
+--- a/src/engine/ctx.rs
++++ b/src/engine/ctx.rs
+@@ -98,6 +98,9 @@
+     pub active_characters: ActiveCharacters,
+     active_character_scratch: Vec<CharId>,
+     pub preexisting_colors_present: bool,
++    /// Embedding-only final text layout; CLI gradients remain unchanged.
++    pub final_text_bands: bool,
++    structured_output: bool,
+     /// When Some, every event emission appends a trace line (test harness).
+     pub event_log: Option<Vec<String>>,
+ }
+@@ -116,8 +119,40 @@
+             active_characters: ActiveCharacters::new(),
+             active_character_scratch: Vec::new(),
+             preexisting_colors_present,
++            final_text_bands: false,
++            structured_output: false,
+             event_log: None,
+         })
++    }
++
++    /// Select cell-only frame generation for in-process renderers.
++    pub fn set_structured_output(&mut self, enabled: bool) {
++        self.structured_output = enabled;
++    }
++
++    /// Map only an effect's final text palette, never its transient scene colors.
++    pub fn final_gradient_mapping(
++        &self,
++        gradient: &crate::utils::graphics::Gradient,
++        direction: crate::utils::graphics::GradientDirection,
++    ) -> Result<crate::utils::graphics::CoordColorMap, String> {
++        let canvas = &self.terminal.canvas;
++        if self.final_text_bands {
++            gradient.build_banded_coordinate_color_mapping(
++                canvas.text_bottom,
++                canvas.text_top,
++                canvas.text_left,
++                canvas.text_right,
++            )
++        } else {
++            gradient.build_coordinate_color_mapping(
++                canvas.text_bottom,
++                canvas.text_top,
++                canvas.text_left,
++                canvas.text_right,
++                direction,
++            )
++        }
+     }
+ 
+     // ------------------------------------------------------------------
+@@ -706,6 +741,43 @@
+             self.terminal.enforce_framerate();
+         }
+         self.clock.advance_frame();
+-        self.terminal.get_formatted_output_string()
++        if self.structured_output {
++            self.terminal.visit_render_cells(|_| {});
++            String::new()
++        } else {
++            self.terminal.get_formatted_output_string()
++        }
+     }
+ }
++
++#[cfg(test)]
++mod structured_frame_tests {
++    use super::*;
++
++    #[test]
++    fn structured_mode_refreshes_cells_without_building_ansi() {
++        let config = TerminalConfig {
++            canvas_width: 1,
++            canvas_height: 1,
++            ignore_terminal_dimensions: true,
++            ..TerminalConfig::default()
++        };
++        let mut ctx = EngineCtx::new(
++            "A",
++            config,
++            Rng::seeded(7),
++            Clock::virtual_with_frame_rate(60),
++        )
++        .unwrap();
++        let input = ctx.terminal.input_characters[0];
++        ctx.terminal.set_character_visibility(input, true);
++        ctx.set_structured_output(true);
++
++        assert!(ctx.frame().is_empty());
++        let mut symbol = None;
++        ctx.terminal.visit_render_cells(|visual| {
++            symbol = visual.and_then(|visual| visual.symbol.chars().next());
++        });
++        assert_eq!(symbol, Some('A'));
++    }
++}
+--- a/src/engine/terminal.rs
++++ b/src/engine/terminal.rs
+@@ -185,7 +185,7 @@
+         .preprocess(input_data)?;
+ 
+         let input_line_lengths: Vec<i64> = preprocessed_lines.iter().map(|l| l.len() as i64).collect();
+-        let terminal_dimensions = get_terminal_dimensions();
++        let terminal_dimensions = terminal_dimensions_for_config(&config, get_terminal_dimensions);
+         let layout = compute_layout(&config, &input_line_lengths, terminal_dimensions.0, terminal_dimensions.1);
+         let mut canvas = Canvas::new(layout.canvas_height, layout.canvas_width);
+         let Layout {
+@@ -546,6 +546,22 @@
+         (width, height)
+     }
+ 
++    /// Visit the canonical composited cells in bottom-to-top row-major order.
++    /// Empty cells are reported as `None`; populated cells expose structured
++    /// visuals without reparsing their cached ANSI representation.
++    pub fn visit_render_cells(
++        &mut self,
++        mut visit: impl FnMut(Option<&crate::engine::animation::CharacterVisual>),
++    ) -> (usize, usize) {
++        let dimensions = self.update_render_cells();
++        for &cell in &self.render_cells {
++            let visual = (cell != EMPTY_RENDER_CELL)
++                .then(|| &*self.arena[cell as usize].animation.current_character_visual);
++            visit(visual);
++        }
++        dimensions
++    }
++
+     /// Terminal._update_terminal_state: materialize the row-oriented state
+     /// exposed by the upstream API. Frame output uses the cell buffer directly
+     /// so the hot path does not copy every rendered byte through these rows.
+@@ -715,6 +731,17 @@
+     }
+     compute_layout(config, line_lengths, width, height)
+         != compute_layout(config, line_lengths, dimensions.0, dimensions.1)
++}
++
++fn terminal_dimensions_for_config(
++    config: &TerminalConfig,
++    probe: impl FnOnce() -> (i64, i64),
++) -> (i64, i64) {
++    if config.ignore_terminal_dimensions && config.canvas_width > 0 && config.canvas_height > 0 {
++        (config.canvas_width, config.canvas_height)
++    } else {
++        probe()
++    }
+ }
+ 
+ /// shutil.get_terminal_size semantics: COLUMNS/LINES env vars win; else query
+@@ -899,3 +926,24 @@
+         .anchor_text(arena, input_characters, config.anchor_text)
+         .map_err(EngineError::Other)
+ }
++
++#[cfg(test)]
++mod embedded_dimensions_tests {
++    use super::*;
++
++    #[test]
++    fn explicit_embedded_dimensions_do_not_probe_the_tty() {
++        let config = TerminalConfig {
++            canvas_width: 80,
++            canvas_height: 24,
++            ignore_terminal_dimensions: true,
++            ..TerminalConfig::default()
++        };
++
++        let dimensions = terminal_dimensions_for_config(&config, || {
++            panic!("embedded rendering must not query a tty")
++        });
++
++        assert_eq!(dimensions, (80, 24));
++    }
++}
+--- a/src/utils/graphics.rs
++++ b/src/utils/graphics.rs
+@@ -325,6 +325,38 @@
+             index += 1;
+         }
+         Ok(&self.spectrum[index])
++    }
++
++    /// Five solid horizontal bands, top to bottom, with 4:3:4:3:5 row weights.
++    /// Round cumulative boundaries to the nearest row (half up), relative to
++    /// the supplied text bounds. Sample the authored spectrum at quarter points;
++    /// never change the spectrum itself, which animation scenes also consume.
++    pub fn build_banded_coordinate_color_mapping(
++        &self,
++        min_row: i64,
++        max_row: i64,
++        min_column: i64,
++        max_column: i64,
++    ) -> Result<CoordColorMap, String> {
++        if min_row < 1 || min_column < 1 || min_row > max_row || min_column > max_column {
++            return Err("Invalid text bounds for horizontal bands.".to_string());
++        }
++        let height = i128::from(max_row - min_row) + 1;
++        let boundaries = [4, 7, 11, 14].map(|weight| (height * weight + 9) / 19);
++        let colors = [0.0, 0.25, 0.5, 0.75, 1.0]
++            .map(|fraction| self.get_color_at_fraction(fraction).cloned())
++            .into_iter()
++            .collect::<Result<Vec<_>, _>>()?;
++        let mut mapping = CoordColorMap::new(min_row, max_row, min_column, max_column, false);
++        // Keep the usual vertical-map insertion order (bottom to top).
++        for row in min_row..=max_row {
++            let from_top = i128::from(max_row - row);
++            let band = boundaries.iter().filter(|&&end| from_top >= end).count();
++            for column in min_column..=max_column {
++                mapping.push(Coord::new(column, row), colors[band]);
++            }
++        }
++        Ok(mapping)
+     }
+ 
+     /// build_coordinate_color_mapping with upstream's insertion order per direction.
+@@ -447,6 +479,33 @@
+     use std::collections::HashMap;
+ 
+     use super::Color;
++
++    #[test]
++    fn final_text_has_five_solid_top_to_bottom_bands() {
++        use super::Gradient;
++        use crate::utils::geometry::Coord;
++        let stops = ["112244", "44aacc", "ffeedd"].map(|hex| Color::from_hex(hex).unwrap());
++        let gradient = Gradient::with_steps(&stops, 12, false).unwrap();
++        let mapping = gradient
++            .build_banded_coordinate_color_mapping(8, 26, 3, 10)
++            .unwrap();
++        let expected = [4, 3, 4, 3, 5];
++        let mut row = 26;
++        for (band, count) in expected.into_iter().enumerate() {
++            let color = gradient.get_color_at_fraction(band as f64 / 4.0).unwrap();
++            for _ in 0..count {
++                for column in 3..=10 {
++                    assert_eq!(
++                        mapping.get(&Coord::new(column, row)),
++                        Some(color),
++                        "band {band}, row {row}"
++                    );
++                }
++                row -= 1;
++            }
++        }
++        assert_eq!(row, 7);
++    }
+ 
+     #[test]
+     fn generated_rgb_preserves_hex_identity_and_channels() {

@@ -46,6 +46,44 @@ pub enum Easing {
 }
 
 impl Easing {
+    /// Assembly engine id for a named easing; custom curves use the Rust engine.
+    pub fn asm_id(&self) -> Option<i64> {
+        Some(match self {
+            Easing::Linear => 0,
+            Easing::InSine => 1,
+            Easing::OutSine => 2,
+            Easing::InOutSine => 3,
+            Easing::InQuad => 4,
+            Easing::OutQuad => 5,
+            Easing::InOutQuad => 6,
+            Easing::InCubic => 7,
+            Easing::OutCubic => 8,
+            Easing::InOutCubic => 9,
+            Easing::InQuart => 10,
+            Easing::OutQuart => 11,
+            Easing::InOutQuart => 12,
+            Easing::InQuint => 13,
+            Easing::OutQuint => 14,
+            Easing::InOutQuint => 15,
+            Easing::InExpo => 16,
+            Easing::OutExpo => 17,
+            Easing::InOutExpo => 18,
+            Easing::InCirc => 19,
+            Easing::OutCirc => 20,
+            Easing::InOutCirc => 21,
+            Easing::InBack => 22,
+            Easing::OutBack => 23,
+            Easing::InOutBack => 24,
+            Easing::InElastic => 25,
+            Easing::OutElastic => 26,
+            Easing::InOutElastic => 27,
+            Easing::InBounce => 28,
+            Easing::OutBounce => 29,
+            Easing::InOutBounce => 30,
+            Easing::CubicBezier(..) => return None,
+        })
+    }
+
     /// CLI parser for the 31 named functions (argutils.Ease.type_parser).
     pub fn parse(s: &str) -> Option<Easing> {
         Some(match s.to_lowercase().as_str() {
@@ -243,17 +281,10 @@ fn out_bounce(p: f64) -> f64 {
 /// upstream constants (20 iterations, 1e-5 convergence, 1e-6 derivative bail).
 /// Upstream lru_caches this; we just recompute (behavior-identical).
 fn bezier_easing(x1: f64, y1: f64, x2: f64, y2: f64, progress: f64) -> f64 {
-    let sample_curve_x = |t: f64| {
-        3.0 * x1 * (1.0 - t).powf(2.0) * t + 3.0 * x2 * (1.0 - t) * t.powf(2.0) + t.powf(3.0)
-    };
-    let sample_curve_y = |t: f64| {
-        3.0 * y1 * (1.0 - t).powf(2.0) * t + 3.0 * y2 * (1.0 - t) * t.powf(2.0) + t.powf(3.0)
-    };
-    let sample_curve_derivative_x = |t: f64| {
-        3.0 * (1.0 - t).powf(2.0) * x1
-            + 6.0 * (1.0 - t) * t * (x2 - x1)
-            + 3.0 * t.powf(2.0) * (1.0 - x2)
-    };
+    let sample_curve_x = |t: f64| 3.0 * x1 * (1.0 - t).powf(2.0) * t + 3.0 * x2 * (1.0 - t) * t.powf(2.0) + t.powf(3.0);
+    let sample_curve_y = |t: f64| 3.0 * y1 * (1.0 - t).powf(2.0) * t + 3.0 * y2 * (1.0 - t) * t.powf(2.0) + t.powf(3.0);
+    let sample_curve_derivative_x =
+        |t: f64| 3.0 * (1.0 - t).powf(2.0) * x1 + 6.0 * (1.0 - t) * t * (x2 - x1) + 3.0 * t.powf(2.0) * (1.0 - x2);
 
     if progress <= 0.0 {
         return 0.0;
@@ -357,10 +388,7 @@ impl<T> SequenceEaser<T> {
         let eased_value = self.easing_tracker.step();
         let seq_len = self.sequence.len();
         if seq_len == 0 {
-            return SequenceStep {
-                added: &[],
-                removed: &[],
-            };
+            return SequenceStep { added: &[], removed: &[] };
         }
         // int() truncation, faithfully
         let length = (eased_value * seq_len as f64) as i64 as usize;
@@ -375,10 +403,7 @@ impl<T> SequenceEaser<T> {
                 added: &[],
                 removed: &self.sequence[length..previous_length],
             },
-            std::cmp::Ordering::Equal => SequenceStep {
-                added: &[],
-                removed: &[],
-            },
+            std::cmp::Ordering::Equal => SequenceStep { added: &[], removed: &[] },
         }
     }
 

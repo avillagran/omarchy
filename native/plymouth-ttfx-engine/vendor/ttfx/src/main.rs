@@ -104,10 +104,7 @@ fn main() -> ExitCode {
         }
         let name = names[rng.choice_index(names.len())].clone();
         chosen_effect = match clap::Parser::try_parse_from::<_, &str>(["ttfx", &name]) {
-            Ok(cli::Cli {
-                effect: Some(effect),
-                ..
-            }) => effect,
+            Ok(cli::Cli { effect: Some(effect), .. }) => effect,
             _ => {
                 ttfx::errln!("Error: failed to build effect '{name}'.");
                 return ExitCode::from(1);
@@ -141,23 +138,48 @@ fn main() -> ExitCode {
     }
 
     let result = loop {
+        // The assembly engine takes the run when it has this effect and this
+        // CPU runs one of its tiers; otherwise it declines untouched.
+        let offered = ttfx::asm::try_run(ttfx::asm::Run {
+            effect: effect_command,
+            input: &input_data,
+            config: &config,
+            rng: &mut rng,
+            parity_dump: cli.parity_dump,
+            virtual_clock: cli.virtual_clock,
+            max_frames: cli.max_frames,
+            tty_output,
+        });
+        match offered {
+            Some(Ok(ttfx::engine::effect::RunOutcome::TerminalResized)) => {
+                config.reuse_canvas = false;
+                continue;
+            }
+            Some(done) => break done.map(|_| ()),
+            None => {}
+        }
+
         let clock = if cli.parity_dump || cli.virtual_clock {
             ttfx::engine::ctx::Clock::virtual_with_frame_rate(config.frame_rate)
         } else {
             ttfx::engine::ctx::Clock::real()
         };
-        let mut ctx =
-            match ttfx::engine::ctx::EngineCtx::new(&input_data, config.clone(), rng, clock) {
-                Ok(ctx) => ctx,
-                Err(engine::error::EngineError::UnsupportedAnsiSequence(seq)) => {
-                    ttfx::errln!("Error: Unsupported ANSI sequence in input data: {seq:?}");
-                    return ExitCode::from(1);
-                }
-                Err(e) => {
-                    ttfx::errln!("Error: {e}");
-                    return ExitCode::from(1);
-                }
-            };
+        let mut ctx = match ttfx::engine::ctx::EngineCtx::new(
+            &input_data,
+            config.clone(),
+            rng,
+            clock,
+        ) {
+            Ok(ctx) => ctx,
+            Err(engine::error::EngineError::UnsupportedAnsiSequence(seq)) => {
+                ttfx::errln!("Error: Unsupported ANSI sequence in input data: {seq:?}");
+                return ExitCode::from(1);
+            }
+            Err(e) => {
+                ttfx::errln!("Error: {e}");
+                return ExitCode::from(1);
+            }
+        };
         let mut effect = effect_command.build_effect();
 
         let outcome = if cli.parity_dump {
@@ -217,11 +239,7 @@ fn m0_dump(input_data: &str, cli: &cli::Cli) -> ExitCode {
             return ExitCode::from(1);
         }
     };
-    let ids: Vec<_> = terminal
-        .character_by_input_coord
-        .values()
-        .copied()
-        .collect();
+    let ids: Vec<_> = terminal.character_by_input_coord.values().copied().collect();
     for id in ids {
         terminal.set_character_visibility(id, true);
     }

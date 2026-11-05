@@ -1,9 +1,15 @@
 [package]
 name = "ttfx"
-version = "0.3.2"
+version = "0.4.0"
 edition = "2021"
 description = "Terminal text effects — a Rust port of terminaltexteffects (TTE)"
 license = "MIT"
+
+[features]
+default = ["asm"]
+# The assembly engine: x86-64 (asm/, needs NASM) or aarch64 (asm/aarch64/,
+# needs GNU as). Ignored on other targets.
+asm = []
 
 [dependencies]
 clap = { version = "4", features = ["derive"] }
